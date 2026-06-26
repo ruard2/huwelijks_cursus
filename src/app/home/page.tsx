@@ -3,7 +3,17 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSession } from '@/lib/session'
-import { DELEN } from '@/content'
+import { DELEN, getChapter } from '@/content'
+import { isAdmin } from '@/lib/roles'
+
+interface CommentEntry {
+  id: string
+  chapterId: string
+  text: string
+  read: boolean
+  createdAt: string
+  member: { name: string }
+}
 
 interface ProgressEntry {
   memberId: string
@@ -17,12 +27,15 @@ export default function HomePage() {
   const [session, setSessionData] = useState<ReturnType<typeof getSession>>(null)
   const [progress, setProgress] = useState<ProgressEntry[]>([])
   const [showOrderNotice, setShowOrderNotice] = useState(false)
+  const [tab, setTab] = useState<'home' | 'comments'>('home')
+  const [comments, setComments] = useState<CommentEntry[]>([])
 
   useEffect(() => {
     const s = getSession()
     if (!s) { router.replace('/'); return }
     setSessionData(s)
     fetchProgress(s.memberId)
+    if (isAdmin(s.memberName)) fetchComments(s.memberName)
 
     const seen = localStorage.getItem('hc_order_notice')
     if (!seen) {
@@ -30,6 +43,23 @@ export default function HomePage() {
       localStorage.setItem('hc_order_notice', '1')
     }
   }, [router])
+
+  async function fetchComments(memberName: string) {
+    const res = await fetch('/api/comments', { headers: { 'x-member-name': memberName } })
+    if (res.ok) {
+      const data = await res.json()
+      setComments(data.comments)
+    }
+  }
+
+  async function markRead(id: string, memberName: string) {
+    await fetch('/api/comments', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-member-name': memberName },
+      body: JSON.stringify({ id }),
+    })
+    setComments(prev => prev.map(c => c.id === id ? { ...c, read: true } : c))
+  }
 
   async function fetchProgress(memberId: string) {
     const res = await fetch(`/api/progress?memberId=${memberId}`)
@@ -49,6 +79,9 @@ export default function HomePage() {
   }
 
   if (!session) return null
+
+  const admin = isAdmin(session.memberName)
+  const unreadCount = comments.filter(c => !c.read).length
 
   const totalChapters = DELEN.reduce((sum, d) => sum + d.chapters.length, 0)
   const totalDone = DELEN.reduce((sum, d) => sum + getDeelDone(d.id), 0)
@@ -72,7 +105,68 @@ export default function HomePage() {
         )}
       </div>
 
-      <div className="max-w-lg mx-auto px-4">
+      {/* Admin tab bar */}
+      {admin && (
+        <div className="bg-white border-b border-stone-100 flex">
+          <button
+            onClick={() => setTab('home')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${tab === 'home' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}
+          >
+            Overzicht
+          </button>
+          <button
+            onClick={() => setTab('comments')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative ${tab === 'comments' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}
+          >
+            Reacties
+            {unreadCount > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">{unreadCount}</span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Comments panel (admin only) */}
+      {admin && tab === 'comments' && (
+        <div className="max-w-lg mx-auto px-4 py-6">
+          {comments.length === 0 ? (
+            <p className="text-center text-stone-400 text-sm py-12">Nog geen reacties</p>
+          ) : (
+            <div className="space-y-3">
+              {comments.map(c => {
+                const cd = getChapter(c.chapterId)
+                return (
+                  <div key={c.id} className={`bg-white rounded-2xl border p-4 ${c.read ? 'border-stone-100 opacity-60' : 'border-stone-200'}`}>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <p className="text-xs font-bold text-stone-900">{c.member.name}</p>
+                        <p className="text-[11px] text-stone-400">
+                          {cd ? `${cd.chapter.number} — ${cd.chapter.title}` : c.chapterId}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <p className="text-[10px] text-stone-300">{new Date(c.createdAt).toLocaleDateString('nl-NL')}</p>
+                        {!c.read && (
+                          <button
+                            onClick={() => markRead(c.id, session.memberName)}
+                            className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full"
+                          >
+                            Gelezen
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm text-stone-700 leading-relaxed">{c.text}</p>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Main content */}
+      {(!admin || tab === 'home') && <div className="max-w-lg mx-auto px-4">
         {/* Hero */}
         <div className="pt-7 pb-5">
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Huwelijkscursus</h1>
@@ -146,7 +240,7 @@ export default function HomePage() {
             )
           })}
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

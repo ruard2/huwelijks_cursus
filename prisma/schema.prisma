@@ -22,6 +22,7 @@ model Member {
   couple    Couple     @relation(fields: [coupleId], references: [id])
   answers   Answer[]
   progress  Progress[]
+  comments  Comment[]
 
   @@unique([coupleId, name])
 }
@@ -48,4 +49,21 @@ model Progress {
   member    Member   @relation(fields: [memberId], references: [id])
 
   @@unique([memberId, chapterId])
+}
+
+model ContentOverride {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  memberId  String
+  chapterId String
+  text      String   @db.Text
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  member    Member   @relation(fields: [memberId], references: [id])
 }
