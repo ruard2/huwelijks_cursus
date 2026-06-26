@@ -1,0 +1,51 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Couple {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  createdAt DateTime @default(now())
+  members   Member[]
+}
+
+model Member {
+  id        String     @id @default(cuid())
+  coupleId  String
+  name      String
+  createdAt DateTime   @default(now())
+  couple    Couple     @relation(fields: [coupleId], references: [id])
+  answers   Answer[]
+  progress  Progress[]
+
+  @@unique([coupleId, name])
+}
+
+model Answer {
+  id         String   @id @default(cuid())
+  memberId   String
+  chapterId  String
+  questionId String
+  value      String   @db.Text
+  isPrivate  Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+  member     Member   @relation(fields: [memberId], references: [id])
+
+  @@unique([memberId, chapterId, questionId])
+}
+
+model Progress {
+  id        String   @id @default(cuid())
+  memberId  String
+  chapterId String
+  done      Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+  member    Member   @relation(fields: [memberId], references: [id])
+
+  @@unique([memberId, chapterId])
+}
