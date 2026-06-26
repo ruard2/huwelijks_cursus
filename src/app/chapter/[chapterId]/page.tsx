@@ -427,14 +427,18 @@ export default function ChapterPage() {
                   <p key={i} className="text-sm text-stone-600 leading-relaxed mb-2 last:mb-0">{para}</p>
                 ))}
                 <div className="mt-4">
-                  {subsectionToShow.sections.map(s => renderSection(s, subsectionToShow))}
+                  {subsectionToShow.sections
+                    .filter(s => !session.isSingle || s.type !== 'samen')
+                    .map(s => renderSection(s, subsectionToShow))}
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {chapter.sections.map(s => renderSection(s))}
+        {chapter.sections
+          .filter(s => !session.isSingle || s.type !== 'samen')
+          .map(s => renderSection(s))}
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-100 px-4 py-3">

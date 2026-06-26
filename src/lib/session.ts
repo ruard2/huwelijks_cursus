@@ -5,6 +5,7 @@ const KEYS = {
   memberName: 'hc_member_name',
   coupleId: 'hc_couple_id',
   coupleCode: 'hc_couple_code',
+  isSingle: 'hc_is_single',
 } as const
 
 export interface Session {
@@ -12,6 +13,7 @@ export interface Session {
   memberName: string
   coupleId: string
   coupleCode: string
+  isSingle: boolean
 }
 
 export function getSession(): Session | null {
@@ -21,7 +23,13 @@ export function getSession(): Session | null {
   const coupleId = localStorage.getItem(KEYS.coupleId)
   const coupleCode = localStorage.getItem(KEYS.coupleCode)
   if (!memberId || !memberName || !coupleId || !coupleCode) return null
-  return { memberId, memberName, coupleId, coupleCode }
+  return {
+    memberId,
+    memberName,
+    coupleId,
+    coupleCode,
+    isSingle: localStorage.getItem(KEYS.isSingle) === '1',
+  }
 }
 
 export function setSession(session: Session) {
@@ -29,6 +37,7 @@ export function setSession(session: Session) {
   localStorage.setItem(KEYS.memberName, session.memberName)
   localStorage.setItem(KEYS.coupleId, session.coupleId)
   localStorage.setItem(KEYS.coupleCode, session.coupleCode)
+  localStorage.setItem(KEYS.isSingle, session.isSingle ? '1' : '0')
 }
 
 export function clearSession() {

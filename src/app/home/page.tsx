@@ -58,10 +58,14 @@ export default function HomePage() {
           <p className="text-xs text-stone-400">Ingelogd als</p>
           <p className="font-semibold text-stone-900 text-sm">{session.memberName}</p>
         </div>
-        <div className="text-right">
-          <p className="text-xs text-stone-400">Koppelcode</p>
-          <p className="font-mono font-bold text-stone-900 text-sm tracking-wider">{session.coupleCode}</p>
-        </div>
+        {session.isSingle ? (
+          <span className="text-xs bg-stone-100 text-stone-500 px-3 py-1 rounded-full">Persoonlijke verkenning</span>
+        ) : (
+          <div className="text-right">
+            <p className="text-xs text-stone-400">Koppelcode</p>
+            <p className="font-mono font-bold text-stone-900 text-sm tracking-wider">{session.coupleCode}</p>
+          </div>
+        )}
       </div>
 
       {showOrderNotice && (
