@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSession } from '@/lib/session'
+import { getSession, setSession } from '@/lib/session'
 import { DELEN, getChapter } from '@/content'
 import { isAdmin } from '@/lib/roles'
+import ProfileMenu from '@/components/ProfileMenu'
 
 interface CommentEntry {
   id: string
@@ -29,6 +30,7 @@ export default function HomePage() {
   const [showOrderNotice, setShowOrderNotice] = useState(false)
   const [tab, setTab] = useState<'home' | 'comments'>('home')
   const [comments, setComments] = useState<CommentEntry[]>([])
+  const [showProfile, setShowProfile] = useState(false)
 
   useEffect(() => {
     const s = getSession()
@@ -91,10 +93,13 @@ export default function HomePage() {
     <div className="min-h-screen bg-stone-50 pb-12">
       {/* Header */}
       <div className="bg-white border-b border-stone-100 px-5 py-4 flex items-center justify-between sticky top-0 z-10">
-        <div>
+        <button onClick={() => setShowProfile(true)} className="text-left active:opacity-70 transition-opacity">
           <p className="text-[11px] text-stone-400 uppercase tracking-wider">Ingelogd als</p>
-          <p className="font-semibold text-stone-900 text-sm leading-tight">{session.memberName}</p>
-        </div>
+          <p className="font-semibold text-stone-900 text-sm leading-tight flex items-center gap-1">
+            {session.memberName}
+            <span className="text-stone-300 text-xs">›</span>
+          </p>
+        </button>
         {session.isSingle ? (
           <span className="text-[11px] bg-stone-100 text-stone-500 px-3 py-1 rounded-full font-medium">Persoonlijk</span>
         ) : (
@@ -241,6 +246,17 @@ export default function HomePage() {
           })}
         </div>
       </div>}
+
+      {showProfile && (
+        <ProfileMenu
+          onClose={() => setShowProfile(false)}
+          onNameChanged={name => {
+            const s = getSession()
+            if (s) { setSession({ ...s, memberName: name }); setSessionData({ ...s, memberName: name }) }
+          }}
+          onLogout={() => router.replace('/')}
+        />
+      )}
     </div>
   )
 }
