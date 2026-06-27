@@ -44,6 +44,7 @@ export default function ChapterPage() {
   const [showEditor, setShowEditor] = useState(false)
   const [isDynamic, setIsDynamic] = useState(false)
   const [activeSubsection, setActiveSubsection] = useState<string | null>(null)
+  const [showVerdieping, setShowVerdieping] = useState(false)
   const [showExitDialog, setShowExitDialog] = useState(false)
   const pusherRef = useRef<InstanceType<typeof Pusher> | null>(null)
   const channelRef = useRef<Channel | null>(null)
@@ -384,6 +385,27 @@ export default function ChapterPage() {
           <div className="bg-white rounded-2xl p-4 border border-stone-100 mb-5">
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-2">Wat zien we hier?</h3>
             {renderContent(introValue, 'text-sm text-stone-700 leading-relaxed mb-2 last:mb-0')}
+          </div>
+        )}
+
+        {/* Verdieping */}
+        {overrides[ck('verdieping')] && (
+          <div className="mb-5">
+            <button
+              onClick={() => setShowVerdieping(v => !v)}
+              className="w-full flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-indigo-100 active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-500 text-base">📖</span>
+                <span className="text-sm font-semibold text-indigo-700">Verdieping</span>
+              </div>
+              <span className={`text-indigo-400 text-sm transition-transform duration-200 ${showVerdieping ? 'rotate-180' : ''}`}>▾</span>
+            </button>
+            {showVerdieping && (
+              <div className="mt-2 bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-4">
+                {renderContent(overrides[ck('verdieping')], 'text-sm text-indigo-900 leading-relaxed')}
+              </div>
+            )}
           </div>
         )}
 

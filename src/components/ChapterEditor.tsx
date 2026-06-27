@@ -32,6 +32,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
     }
     d['verse2.ref'] = overrides[ck('verse2.ref')] ?? ''
     d['verse2.text'] = overrides[ck('verse2.text')] ?? ''
+    d['verdieping'] = overrides[ck('verdieping')] ?? ''
     if (chapter.intro !== undefined || isDynamic) {
       const stored = overrides[ck('intro')]
       d['intro'] = stored ?? (chapter.intro ? chapter.intro.split('\n\n').map((p, i) => overrides[ck(`intro.${i}`)] ?? p).join('\n\n') : '')
@@ -177,6 +178,17 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
             />
           </div>
         )}
+
+        {/* Verdieping */}
+        <div>
+          <label className={labelCls}>Verdieping <span className="font-normal normal-case tracking-normal text-stone-300">(optioneel — verschijnt als uitklapknop voor lezers)</span></label>
+          <RichEditor
+            value={draft['verdieping'] ?? ''}
+            onChange={v => set('verdieping', v)}
+            placeholder="Verdiepende tekst, achtergrondinfo, extra Bijbelverwijzingen..."
+            minHeight="120px"
+          />
+        </div>
 
         {/* Sections (static chapters only) */}
         {chapter.sections.map(s => (
