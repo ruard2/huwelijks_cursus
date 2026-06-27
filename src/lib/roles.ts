@@ -1,5 +1,6 @@
 export function isEditor(name: string) {
-  return name.toLowerCase() === 'elianek'
+  const n = name.toLowerCase()
+  return n === 'elianek' || n === 'ruard' || n === 'admin'
 }
 
 export function isAdmin(name: string) {
