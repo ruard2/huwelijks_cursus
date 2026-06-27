@@ -8,7 +8,8 @@ import type { Chapter, Deel, Section, Subsection, Question } from '@/content'
 import { encryptAnswer, decryptAnswer } from '@/lib/crypto'
 import { getPusherClient, coupleChannel, EVENTS } from '@/lib/pusher'
 import { isEditor } from '@/lib/roles'
-import EditableText from '@/components/EditableText'
+import { renderContent } from '@/lib/renderContent'
+import ChapterEditor from '@/components/ChapterEditor'
 import CommentPopup from '@/components/CommentPopup'
 import type Pusher from 'pusher-js'
 import type { Channel } from 'pusher-js'
@@ -21,7 +22,6 @@ interface AnswerRecord {
   value: string
   isPrivate: boolean
 }
-
 interface AnswerMap {
   [questionId: string]: { mine?: AnswerRecord; partner?: AnswerRecord }
 }
@@ -41,29 +41,27 @@ export default function ChapterPage() {
   const [chapterData, setChapterData] = useState<{ chapter: Chapter; deel: Deel } | null>(null)
   const [answers, setAnswers] = useState<AnswerMap>({})
   const [overrides, setOverrides] = useState<Record<string, string>>({})
+  const [showEditor, setShowEditor] = useState(false)
   const [activeSubsection, setActiveSubsection] = useState<string | null>(null)
   const [showExitDialog, setShowExitDialog] = useState(false)
   const pusherRef = useRef<InstanceType<typeof Pusher> | null>(null)
   const channelRef = useRef<Channel | null>(null)
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
-  // key helpers
   const ck = useCallback((suffix: string) => `ch:${chapterId}:${suffix}`, [chapterId])
   const t = useCallback((key: string, fallback: string) => overrides[key] ?? fallback, [overrides])
+  function txt(key: string, fallback: string) { return t(ck(key), fallback) }
 
   useEffect(() => {
     const s = getSession()
     if (!s) { router.replace('/'); return }
     setSessionData(s)
-
     const cd = getChapter(chapterId)
     if (!cd) { router.replace('/home'); return }
     setChapterData(cd)
-
     loadAnswers(s.memberId, chapterId)
     loadOverrides(chapterId)
     setupPusher(s.coupleCode, s.memberId, chapterId, s.coupleCode)
-
     return () => {
       if (channelRef.current) pusherRef.current?.unsubscribe(coupleChannel(s.coupleCode))
       pusherRef.current?.disconnect()
@@ -84,36 +82,27 @@ export default function ChapterPage() {
       if (data.isPrivate && data.value) displayValue = await decryptAnswer(data.value, coupleCode)
       setAnswers(prev => ({
         ...prev,
-        [data.questionId]: {
-          ...prev[data.questionId],
-          partner: { ...data, value: displayValue },
-        },
+        [data.questionId]: { ...prev[data.questionId], partner: { ...data, value: displayValue } },
       }))
     })
   }
 
   async function loadOverrides(chapId: string) {
     const res = await fetch(`/api/content?prefix=ch:${chapId}:`)
-    if (res.ok) {
-      const data = await res.json()
-      setOverrides(data.overrides)
-    }
+    if (res.ok) setOverrides((await res.json()).overrides)
   }
 
   async function loadAnswers(memberId: string, chapId: string) {
     const res = await fetch(`/api/answers?memberId=${memberId}&chapterId=${chapId}`)
     if (!res.ok) return
-    const data = await res.json()
     const s = getSession()!
     const map: AnswerMap = {}
-    for (const a of data.answers as AnswerRecord[]) {
-      const key = a.questionId
-      if (!map[key]) map[key] = {}
+    for (const a of (await res.json()).answers as AnswerRecord[]) {
+      if (!map[a.questionId]) map[a.questionId] = {}
       let displayValue = a.value
       if (a.isPrivate && a.value) displayValue = await decryptAnswer(a.value, s.coupleCode)
-      const record = { ...a, value: displayValue }
-      if (a.memberId === memberId) map[key].mine = record
-      else map[key].partner = record
+      if (a.memberId === memberId) map[a.questionId].mine = { ...a, value: displayValue }
+      else map[a.questionId].partner = { ...a, value: displayValue }
     }
     setAnswers(map)
   }
@@ -167,40 +156,24 @@ export default function ChapterPage() {
   const editor = isEditor(session.memberName)
   const subsectionToShow = chapter.subsections?.find(s => s.id === activeSubsection)
 
-  function txt(key: string, fallback: string) { return t(ck(key), fallback) }
-
-  function renderEditable(key: string, fallback: string, className: string, tag: 'p' | 'h1' | 'h2' | 'h3' | 'span' = 'p', multiline = true) {
-    const value = txt(key, fallback)
-    if (!editor) {
-      const Tag = tag
-      return <Tag className={className}>{value}</Tag>
-    }
-    return (
-      <EditableText
-        contentKey={ck(key)}
-        value={value}
-        tag={tag}
-        className={className}
-        multiline={multiline}
-        onSaved={(k, v) => setOverrides(prev => ({ ...prev, [k]: v }))}
-      />
-    )
-  }
-
   function renderQuestion(q: Question, section: Section | null, subsection: Subsection | null) {
     const qKey = buildKey(section, subsection, q)
     const myAnswer = answers[qKey]?.mine
     const partnerAnswer = answers[qKey]?.partner
     const isPrivate = myAnswer?.isPrivate ?? false
-    const qText = txt(`s:${section?.id ?? ''}.q:${q.id}.text`, q.text)
-    const qHint = q.hint ? txt(`s:${section?.id ?? ''}.q:${q.id}.hint`, q.hint) : undefined
+    const prefix = subsection
+      ? `sub:${subsection.id}.s:${section?.id}.q:${q.id}`
+      : `s:${section?.id}.q:${q.id}`
+    const qText = txt(`${prefix}.text`, q.text)
+    const qHint = q.hint ? txt(`${prefix}.hint`, q.hint) : undefined
 
     if (q.type === 'readonly') {
+      const val = txt(`${prefix}.value`, q.value ?? '')
       return (
         <div key={q.id} className="mb-5">
-          {renderEditable(`s:${section?.id}.q:${q.id}.text`, q.text, 'text-sm font-medium text-stone-700 mb-2')}
+          <p className="text-sm font-medium text-stone-700 mb-2">{qText}</p>
           <div className="bg-stone-50 rounded-xl p-4 border border-stone-200">
-            {renderEditable(`s:${section?.id}.q:${q.id}.value`, q.value ?? '', 'text-stone-600 text-sm italic leading-relaxed')}
+            {renderContent(val, 'text-stone-600 text-sm italic leading-relaxed')}
           </div>
         </div>
       )
@@ -218,10 +191,7 @@ export default function ChapterPage() {
       return (
         <div key={q.id} className="mb-6">
           <div className="flex items-start justify-between gap-2 mb-2">
-            {editor
-              ? <EditableText contentKey={ck(`s:${section?.id}.q:${q.id}.text`)} value={qText} tag="p" className="text-sm font-medium text-stone-700 flex-1" multiline={false} onSaved={(k, v) => setOverrides(prev => ({ ...prev, [k]: v }))} />
-              : <p className="text-sm font-medium text-stone-700">{qText}</p>
-            }
+            <p className="text-sm font-medium text-stone-700">{qText}</p>
             <button onClick={() => togglePrivate(qKey)} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
           </div>
           {qHint && <p className="text-xs text-stone-400 mb-3">{qHint}</p>}
@@ -244,7 +214,7 @@ export default function ChapterPage() {
     if (q.type === 'parts' && q.parts) {
       return (
         <div key={q.id} className="mb-6">
-          {renderEditable(`s:${section?.id}.q:${q.id}.text`, q.text, 'text-sm font-medium text-stone-700 mb-3')}
+          <p className="text-sm font-medium text-stone-700 mb-3">{qText}</p>
           {qHint && <p className="text-xs text-stone-400 mb-3">{qHint}</p>}
           {q.parts.map(part => {
             const partKey = `${qKey}.${part.id}`
@@ -276,10 +246,7 @@ export default function ChapterPage() {
     return (
       <div key={q.id} className="mb-5">
         <div className="flex items-start justify-between gap-2 mb-1">
-          {editor
-            ? <EditableText contentKey={ck(`s:${section?.id}.q:${q.id}.text`)} value={qText} tag="p" className="text-sm font-medium text-stone-700 flex-1" multiline={false} onSaved={(k, v) => setOverrides(prev => ({ ...prev, [k]: v }))} />
-            : <p className="text-sm font-medium text-stone-700">{qText}</p>
-          }
+          <p className="text-sm font-medium text-stone-700">{qText}</p>
           <button onClick={() => togglePrivate(qKey)} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
         </div>
         {qHint && <p className="text-xs text-stone-400 mb-2">{qHint}</p>}
@@ -305,74 +272,67 @@ export default function ChapterPage() {
       personal_vrouw: 'bg-rose-50 border-rose-200',
     }
     const labelMap: Record<string, string> = {
-      personal: 'text-stone-500',
-      samen: 'text-indigo-600',
-      reflection: 'text-stone-500',
-      personal_man: 'text-sky-600',
-      personal_vrouw: 'text-rose-600',
+      personal: 'text-stone-500', samen: 'text-indigo-600', reflection: 'text-stone-500',
+      personal_man: 'text-sky-600', personal_vrouw: 'text-rose-600',
     }
-    const sectionTitle = txt(`s:${section.id}.title`, section.title)
-    const sectionIntro = section.intro ? txt(`s:${section.id}.intro`, section.intro) : null
+    const prefix = subsection ? `sub:${subsection.id}.s:${section.id}` : `s:${section.id}`
+    const sectionTitle = txt(`${prefix}.title`, section.title)
+    const sectionIntro = section.intro ? txt(`${prefix}.intro`, section.intro) : null
 
     return (
       <div key={section.id} className={`mb-5 rounded-2xl border p-4 ${bgMap[section.type] ?? 'bg-white border-stone-200'}`}>
         <h3 className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${labelMap[section.type] ?? 'text-stone-500'}`}>
-          {editor
-            ? <EditableText contentKey={ck(`s:${section.id}.title`)} value={sectionTitle} tag="span" className="" multiline={false} onSaved={(k, v) => setOverrides(prev => ({ ...prev, [k]: v }))} />
-            : sectionTitle
-          }
+          {sectionTitle}
         </h3>
-        {sectionIntro && (
-          editor
-            ? <EditableText contentKey={ck(`s:${section.id}.intro`)} value={sectionIntro} tag="p" className="text-xs text-stone-500 mb-3 italic leading-relaxed" onSaved={(k, v) => setOverrides(prev => ({ ...prev, [k]: v }))} />
-            : <p className="text-xs text-stone-500 mb-3 italic leading-relaxed">{sectionIntro}</p>
-        )}
+        {sectionIntro && renderContent(sectionIntro, 'text-xs text-stone-500 mb-3 italic leading-relaxed')}
         {section.questions.map(q => renderQuestion(q, section, subsection))}
       </div>
     )
   }
 
+  const introValue = overrides[ck('intro')] ?? chapter.intro?.split('\n\n').map((p, i) => overrides[ck(`intro.${i}`)] ?? p).join('\n\n')
+
   return (
     <div className="min-h-screen bg-stone-50">
+      {/* Header */}
       <div className="bg-white border-b border-stone-100 px-4 py-3 flex items-center gap-2 sticky top-0 z-10">
         <button onClick={() => setShowExitDialog(true)} className="text-stone-400 p-1 text-sm">← Terug</button>
         <div className="flex-1 min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-widest truncate" style={{ color: deel.color }}>
             {deel.letter ? `Deel ${deel.letter}` : ''} — {chapter.number}
           </p>
-          <p className="text-sm font-semibold text-stone-900 truncate leading-tight">
-            {txt('title', chapter.title)}
-          </p>
+          <p className="text-sm font-semibold text-stone-900 truncate leading-tight">{txt('title', String(chapter.title))}</p>
         </div>
         {editor && (
-          <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold shrink-0">✏️ Editor</span>
+          <button
+            onClick={() => setShowEditor(true)}
+            className="shrink-0 flex items-center gap-1 bg-amber-100 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-xl"
+          >
+            ✏️ Bewerken
+          </button>
         )}
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-6 pb-32">
         {chapter.verse && (
           <div className="bg-amber-50 border-l-4 border-amber-400 rounded-r-2xl px-4 py-3 mb-5">
-            {chapter.verse.pretext && renderEditable('verse.pretext', chapter.verse.pretext, 'text-xs text-amber-600 mb-1 italic')}
-            {renderEditable('verse.ref', chapter.verse.ref, 'text-xs font-bold text-amber-700 mb-1', 'p', false)}
-            {renderEditable('verse.text', chapter.verse.text, 'text-sm text-amber-900 italic leading-relaxed')}
+            {chapter.verse.pretext && <p className="text-xs text-amber-600 mb-1 italic">{txt('verse.pretext', chapter.verse.pretext)}</p>}
+            <p className="text-xs font-bold text-amber-700 mb-1">{txt('verse.ref', chapter.verse.ref)}</p>
+            {renderContent(txt('verse.text', chapter.verse.text), 'text-sm text-amber-900 italic leading-relaxed')}
           </div>
         )}
 
-        {chapter.intro && (
+        {chapter.intro && introValue && (
           <div className="bg-white rounded-2xl p-4 border border-stone-100 mb-5">
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-2">Wat zien we hier?</h3>
-            {chapter.intro.split('\n\n').map((para, i) =>
-              editor
-                ? <EditableText key={i} contentKey={ck(`intro.${i}`)} value={txt(`intro.${i}`, para)} tag="p" className="text-sm text-stone-700 leading-relaxed mb-2 last:mb-0" onSaved={(k, v) => setOverrides(prev => ({ ...prev, [k]: v }))} />
-                : <p key={i} className="text-sm text-stone-700 leading-relaxed mb-2 last:mb-0">{txt(`intro.${i}`, para)}</p>
-            )}
+            {renderContent(introValue, 'text-sm text-stone-700 leading-relaxed mb-2 last:mb-0')}
           </div>
         )}
 
         {chapter.subsections && chapter.subsections.length > 0 && (
           <div className="mb-5">
             <p className="text-[10px] text-stone-400 uppercase tracking-widest mb-3 font-semibold">Onderdelen</p>
-            <div className="grid grid-cols-2 gap-2 mb-5">
+            <div className="grid grid-cols-2 gap-2 mb-4">
               {chapter.subsections.map(sub => (
                 <button key={sub.id} onClick={() => setActiveSubsection(activeSubsection === sub.id ? null : sub.id)}
                   className={`text-left rounded-2xl p-4 border transition-all active:scale-95 ${activeSubsection === sub.id ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>
@@ -384,9 +344,7 @@ export default function ChapterPage() {
             {subsectionToShow && (
               <div className="bg-white rounded-2xl p-4 border border-stone-200 mb-3">
                 <h3 className="font-bold text-stone-900 text-sm mb-2">{subsectionToShow.number} — {subsectionToShow.title}</h3>
-                {subsectionToShow.intro.split('\n\n').map((para, i) => (
-                  <p key={i} className="text-sm text-stone-600 leading-relaxed mb-2 last:mb-0">{para}</p>
-                ))}
+                {renderContent(subsectionToShow.intro, 'text-sm text-stone-600 leading-relaxed mb-2')}
                 <div className="mt-4">
                   {subsectionToShow.sections
                     .filter(s => !session.isSingle || s.type !== 'samen')
@@ -401,15 +359,13 @@ export default function ChapterPage() {
           .filter(s => !session.isSingle || s.type !== 'samen')
           .map(s => renderSection(s))}
 
-        {/* Comment link */}
         <div className="mt-6 pt-4 border-t border-stone-100">
-          <CommentPopup chapterId={chapterId} chapterTitle={txt('title', chapter.title)} />
+          <CommentPopup chapterId={chapterId} chapterTitle={txt('title', String(chapter.title))} />
         </div>
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-100 px-4 py-3">
-        <button onClick={() => setShowExitDialog(true)}
-          className="w-full py-3 bg-stone-900 text-white rounded-2xl font-semibold text-sm">
+        <button onClick={() => setShowExitDialog(true)} className="w-full py-3 bg-stone-900 text-white rounded-2xl font-semibold text-sm">
           Klaar met dit hoofdstuk
         </button>
       </div>
@@ -426,6 +382,18 @@ export default function ChapterPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showEditor && (
+        <ChapterEditor
+          chapter={chapter}
+          deelTitle={deel.title}
+          deelLetter={deel.letter}
+          deelColor={deel.color}
+          overrides={overrides}
+          onSaved={updates => setOverrides(prev => ({ ...prev, ...updates }))}
+          onClose={() => setShowEditor(false)}
+        />
       )}
     </div>
   )
