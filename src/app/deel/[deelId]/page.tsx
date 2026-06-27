@@ -34,6 +34,7 @@ export default function DeelPage() {
   const [dynamicChapters, setDynamicChapters] = useState<DynamicChapter[]>([])
   const [chapterOverrides, setChapterOverrides] = useState<Record<string, string>>({})
   const [creating, setCreating] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
   useEffect(() => {
     const s = getSession()
@@ -55,8 +56,9 @@ export default function DeelPage() {
     const chapters: DynamicChapter[] = data.chapters ?? []
     setDynamicChapters(chapters)
     if (chapters.length > 0) {
-      const ids = chapters.map((c: DynamicChapter) => c.id).join(',')
-      const r2 = await fetch(`/api/content?prefix=ch:&ids=${ids}`)
+      // Fetch title overrides for each dynamic chapter
+      const titleKeys = chapters.map((c: DynamicChapter) => `ch:${c.id}:title`).join(',')
+      const r2 = await fetch(`/api/content?keys=${encodeURIComponent(titleKeys)}`)
       if (r2.ok) {
         const d2 = await r2.json()
         setChapterOverrides(d2.overrides ?? {})
@@ -74,9 +76,21 @@ export default function DeelPage() {
     })
     if (res.ok) {
       const data = await res.json()
+      sessionStorage.setItem('hc_open_editor', data.chapter.id)
       router.push(`/chapter/${data.chapter.id}`)
     }
     setCreating(false)
+  }
+
+  async function deleteChapter(id: string) {
+    if (!session) return
+    await fetch('/api/chapters', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'x-member-name': session.memberName },
+      body: JSON.stringify({ id }),
+    })
+    setDynamicChapters(prev => prev.filter(c => c.id !== id))
+    setDeleteConfirm(null)
   }
 
   if (!deel) return (
@@ -97,15 +111,15 @@ export default function DeelPage() {
     return progress.some(p => p.chapterId === chapterId && p.memberId === memberId && p.done)
   }
 
-  const allChapters = [
-    ...deel.chapters.map((ch, idx) => ({ id: ch.id, title: ch.title, verse: ch.verse?.ref, idx })),
-    ...dynamicChapters.map((dc, i) => ({
-      id: dc.id,
-      title: chapterOverrides[`ch:${dc.id}:title`] ?? 'Nieuw hoofdstuk',
-      verse: undefined,
-      idx: deel.chapters.length + i,
-    })),
-  ]
+  const staticChapters = deel.chapters.map((ch, idx) => ({ id: ch.id, title: ch.title, verse: ch.verse?.ref, idx, isDynamic: false }))
+  const dynChapters = dynamicChapters.map((dc, i) => ({
+    id: dc.id,
+    title: chapterOverrides[`ch:${dc.id}:title`] ?? 'Nieuw hoofdstuk',
+    verse: undefined,
+    idx: deel.chapters.length + i,
+    isDynamic: true,
+  }))
+  const allChapters = [...staticChapters, ...dynChapters]
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -147,32 +161,42 @@ export default function DeelPage() {
               p => p.chapterId === ch.id && p.memberId !== session.memberId && p.done
             )
             return (
-              <button
-                key={ch.id}
-                onClick={() => router.push(`/chapter/${ch.id}`)}
-                className="w-full text-left bg-white rounded-2xl border border-stone-100 px-5 py-4 flex items-center gap-4 active:scale-[0.98] transition-transform"
-              >
-                <span
-                  className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
-                  style={myDone
-                    ? { backgroundColor: deel.color, color: 'white' }
-                    : { backgroundColor: '#f5f5f4', color: '#a8a29e' }}
+              <div key={ch.id} className="relative group">
+                <button
+                  onClick={() => router.push(`/chapter/${ch.id}`)}
+                  className="w-full text-left bg-white rounded-2xl border border-stone-100 px-5 py-4 flex items-center gap-4 active:scale-[0.98] transition-transform"
                 >
-                  {myDone ? '✓' : ch.idx + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-stone-900 leading-snug">{ch.title}</p>
-                  {ch.verse && (
-                    <p className="text-xs text-stone-400 mt-0.5 italic truncate">{ch.verse}</p>
-                  )}
-                  {partnerEntry && (
-                    <p className="text-xs mt-1" style={{ color: deel.color }}>
-                      ✓ {partnerEntry.memberName.split(' ')[0]} klaar
-                    </p>
-                  )}
-                </div>
-                <span className="text-stone-300 shrink-0">›</span>
-              </button>
+                  <span
+                    className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                    style={myDone
+                      ? { backgroundColor: deel.color, color: 'white' }
+                      : { backgroundColor: '#f5f5f4', color: '#a8a29e' }}
+                  >
+                    {myDone ? '✓' : ch.idx + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-stone-900 leading-snug">{ch.title}</p>
+                    {ch.verse && (
+                      <p className="text-xs text-stone-400 mt-0.5 italic truncate">{ch.verse}</p>
+                    )}
+                    {partnerEntry && (
+                      <p className="text-xs mt-1" style={{ color: deel.color }}>
+                        ✓ {partnerEntry.memberName.split(' ')[0]} klaar
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-stone-300 shrink-0">›</span>
+                </button>
+                {editor && ch.isDynamic && (
+                  <button
+                    onClick={e => { e.stopPropagation(); setDeleteConfirm(ch.id) }}
+                    className="absolute right-12 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-red-50 text-red-400 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Verwijder hoofdstuk"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             )
           })}
 
@@ -189,6 +213,32 @@ export default function DeelPage() {
           )}
         </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+            <h2 className="font-bold text-stone-900 text-lg mb-2">Hoofdstuk verwijderen</h2>
+            <p className="text-stone-500 text-sm mb-5">
+              Weet je zeker dat je dit hoofdstuk wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={() => deleteChapter(deleteConfirm)}
+                className="w-full py-3 bg-red-500 text-white rounded-2xl font-semibold"
+              >
+                Ja, verwijderen
+              </button>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="w-full py-3 bg-stone-100 text-stone-700 rounded-2xl font-medium"
+              >
+                Annuleren
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showEditor && (
         <DeelEditor

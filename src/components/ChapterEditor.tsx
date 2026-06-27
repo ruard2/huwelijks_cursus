@@ -11,27 +11,30 @@ interface Props {
   deelLetter?: string
   deelColor: string
   overrides: Record<string, string>
+  isDynamic?: boolean
   onSaved: (updates: Record<string, string>) => void
   onClose: () => void
 }
 
-export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColor, overrides, onSaved, onClose }: Props) {
+export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColor, overrides, isDynamic, onSaved, onClose }: Props) {
   const ck = useCallback((suffix: string) => `ch:${chapter.id}:${suffix}`, [chapter.id])
   const t = (key: string, fallback: string) => overrides[ck(key)] ?? fallback
 
   const [draft, setDraft] = useState<Record<string, string>>(() => {
     const d: Record<string, string> = {}
     d['title'] = t('title', String(chapter.title))
-    if (chapter.verse) {
-      d['verse.ref'] = t('verse.ref', chapter.verse.ref)
-      d['verse.text'] = t('verse.text', chapter.verse.text)
-      if (chapter.verse.pretext) d['verse.pretext'] = t('verse.pretext', chapter.verse.pretext)
+    if (chapter.verse || isDynamic) {
+      d['verse.ref'] = t('verse.ref', chapter.verse?.ref ?? '')
+      d['verse.text'] = t('verse.text', chapter.verse?.text ?? '')
+      if (chapter.verse?.pretext !== undefined || isDynamic) {
+        d['verse.pretext'] = t('verse.pretext', chapter.verse?.pretext ?? '')
+      }
     }
     d['verse2.ref'] = overrides[ck('verse2.ref')] ?? ''
     d['verse2.text'] = overrides[ck('verse2.text')] ?? ''
-    if (chapter.intro) {
+    if (chapter.intro !== undefined || isDynamic) {
       const stored = overrides[ck('intro')]
-      d['intro'] = stored ?? chapter.intro.split('\n\n').map((p, i) => overrides[ck(`intro.${i}`)] ?? p).join('\n\n')
+      d['intro'] = stored ?? (chapter.intro ? chapter.intro.split('\n\n').map((p, i) => overrides[ck(`intro.${i}`)] ?? p).join('\n\n') : '')
     }
     chapter.sections.forEach(s => {
       d[`s:${s.id}.title`] = t(`s:${s.id}.title`, s.title)
@@ -82,6 +85,9 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
   const inputCls = 'w-full px-3 py-2 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300'
   const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1'
 
+  const showVerse = !!(chapter.verse || isDynamic)
+  const showIntro = chapter.intro !== undefined || isDynamic
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-stone-50">
       {/* Header */}
@@ -108,22 +114,24 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
         {/* Title */}
         <div>
           <label className={labelCls}>Hoofdstuktitel</label>
-          <input type="text" value={draft['title'] ?? ''} onChange={e => set('title', e.target.value)} className={inputCls} />
+          <input type="text" value={draft['title'] ?? ''} onChange={e => set('title', e.target.value)} className={inputCls} placeholder="Titel van dit hoofdstuk..." />
         </div>
 
         {/* Verse */}
-        {chapter.verse && (
+        {showVerse && (
           <div className="bg-amber-50 rounded-2xl p-4 space-y-3 border border-amber-200">
-            <p className={labelCls} style={{ color: '#92400e' }}>Bijbeltekst</p>
-            {chapter.verse.pretext !== undefined && (
+            <p className={labelCls} style={{ color: '#92400e' }}>
+              Bijbeltekst{isDynamic && !chapter.verse && <span className="font-normal normal-case tracking-normal text-amber-500 ml-1">(optioneel)</span>}
+            </p>
+            {(chapter.verse?.pretext !== undefined || isDynamic) && (
               <div>
                 <label className={labelCls}>Voortekst</label>
-                <input type="text" value={draft['verse.pretext'] ?? ''} onChange={e => set('verse.pretext', e.target.value)} className={inputCls} />
+                <input type="text" value={draft['verse.pretext'] ?? ''} onChange={e => set('verse.pretext', e.target.value)} className={inputCls} placeholder="bijv. Lees samen..." />
               </div>
             )}
             <div>
               <label className={labelCls}>Referentie</label>
-              <input type="text" value={draft['verse.ref'] ?? ''} onChange={e => set('verse.ref', e.target.value)} className={inputCls} />
+              <input type="text" value={draft['verse.ref'] ?? ''} onChange={e => set('verse.ref', e.target.value)} className={inputCls} placeholder="bijv. Genesis 2:24" />
             </div>
             <div>
               <label className={labelCls}>Tekst</label>
@@ -137,38 +145,40 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
           </div>
         )}
 
-        {/* Second verse (always editable, purely DB-driven) */}
-        <div className="bg-amber-50 rounded-2xl p-4 space-y-3 border border-amber-200">
-          <p className={labelCls} style={{ color: '#92400e' }}>Tweede bijbeltekst <span className="font-normal normal-case tracking-normal text-amber-500">(optioneel)</span></p>
-          <div>
-            <label className={labelCls}>Referentie</label>
-            <input type="text" value={draft['verse2.ref'] ?? ''} onChange={e => set('verse2.ref', e.target.value)} className={inputCls} placeholder="bijv. Johannes 3:16" />
+        {/* Second verse */}
+        {!isDynamic && (
+          <div className="bg-amber-50 rounded-2xl p-4 space-y-3 border border-amber-200">
+            <p className={labelCls} style={{ color: '#92400e' }}>Tweede bijbeltekst <span className="font-normal normal-case tracking-normal text-amber-500">(optioneel)</span></p>
+            <div>
+              <label className={labelCls}>Referentie</label>
+              <input type="text" value={draft['verse2.ref'] ?? ''} onChange={e => set('verse2.ref', e.target.value)} className={inputCls} placeholder="bijv. Johannes 3:16" />
+            </div>
+            <div>
+              <label className={labelCls}>Tekst</label>
+              <RichEditor
+                value={draft['verse2.text'] ?? ''}
+                onChange={v => set('verse2.text', v)}
+                placeholder="Bijbeltekst..."
+                minHeight="60px"
+              />
+            </div>
           </div>
-          <div>
-            <label className={labelCls}>Tekst</label>
-            <RichEditor
-              value={draft['verse2.text'] ?? ''}
-              onChange={v => set('verse2.text', v)}
-              placeholder="Bijbeltekst..."
-              minHeight="60px"
-            />
-          </div>
-        </div>
+        )}
 
         {/* Intro */}
-        {chapter.intro !== undefined && (
+        {showIntro && (
           <div>
-            <label className={labelCls}>Introductie (Wat zien we hier?)</label>
+            <label className={labelCls}>Introductie{isDynamic && <span className="font-normal normal-case tracking-normal text-stone-300 ml-1">(optioneel)</span>}</label>
             <RichEditor
               value={draft['intro'] ?? ''}
               onChange={v => set('intro', v)}
-              placeholder="Introductietekst..."
+              placeholder="Introductietekst voor dit hoofdstuk..."
               minHeight="120px"
             />
           </div>
         )}
 
-        {/* Sections */}
+        {/* Sections (static chapters only) */}
         {chapter.sections.map(s => (
           <div key={s.id} className="bg-white rounded-2xl border border-stone-200 p-4 space-y-4">
             <div>

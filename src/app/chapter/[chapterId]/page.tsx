@@ -42,6 +42,7 @@ export default function ChapterPage() {
   const [answers, setAnswers] = useState<AnswerMap>({})
   const [overrides, setOverrides] = useState<Record<string, string>>({})
   const [showEditor, setShowEditor] = useState(false)
+  const [isDynamic, setIsDynamic] = useState(false)
   const [activeSubsection, setActiveSubsection] = useState<string | null>(null)
   const [showExitDialog, setShowExitDialog] = useState(false)
   const pusherRef = useRef<InstanceType<typeof Pusher> | null>(null)
@@ -57,8 +58,34 @@ export default function ChapterPage() {
     if (!s) { router.replace('/'); return }
     setSessionData(s)
     const cd = getChapter(chapterId)
-    if (!cd) { router.replace('/home'); return }
-    setChapterData(cd)
+    if (cd) {
+      setChapterData(cd)
+    } else {
+      // Try dynamic (DB) chapter
+      fetch(`/api/chapters?id=${chapterId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (!data.chapter) { router.replace('/home'); return }
+          const { getDeel } = require('@/content') as typeof import('@/content')
+          const deel = getDeel(data.chapter.deelId)
+          if (!deel) { router.replace('/home'); return }
+          const synthChapter: Chapter = {
+            id: chapterId,
+            number: '',
+            title: '',
+            deelId: data.chapter.deelId,
+            sections: [],
+          }
+          setChapterData({ chapter: synthChapter, deel })
+          setIsDynamic(true)
+          // Auto-open editor if this was just created (no title set yet)
+          const flagId = sessionStorage.getItem('hc_open_editor')
+          if (flagId === chapterId) {
+            sessionStorage.removeItem('hc_open_editor')
+            setShowEditor(true)
+          }
+        })
+    }
     loadAnswers(s.memberId, chapterId)
     loadOverrides(chapterId)
     setupPusher(s.coupleCode, s.memberId, chapterId, s.coupleCode)
@@ -291,6 +318,8 @@ export default function ChapterPage() {
   }
 
   const introValue = overrides[ck('intro')] ?? chapter.intro?.split('\n\n').map((p, i) => overrides[ck(`intro.${i}`)] ?? p).join('\n\n')
+  const dynamicVerseRef = overrides[ck('verse.ref')]
+  const chapterTitle = txt('title', String(chapter.title)) || 'Nieuw hoofdstuk'
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -299,9 +328,9 @@ export default function ChapterPage() {
         <button onClick={() => setShowExitDialog(true)} className="text-stone-400 p-1 text-sm">← Terug</button>
         <div className="flex-1 min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-widest truncate" style={{ color: deel.color }}>
-            {deel.letter ? `Deel ${deel.letter}` : ''} — {chapter.number}
+            {deel.letter ? `Deel ${deel.letter}` : ''}{chapter.number ? ` — ${chapter.number}` : ''}
           </p>
-          <p className="text-sm font-semibold text-stone-900 truncate leading-tight">{txt('title', String(chapter.title))}</p>
+          <p className="text-sm font-semibold text-stone-900 truncate leading-tight">{chapterTitle}</p>
         </div>
         {editor && (
           <button
@@ -313,12 +342,34 @@ export default function ChapterPage() {
         )}
       </div>
 
+      {/* Empty state for new dynamic chapters */}
+      {isDynamic && !dynamicVerseRef && !introValue && (
+        <div className="max-w-lg mx-auto px-4 pt-12 pb-6 text-center">
+          <p className="text-stone-400 text-sm mb-4">Dit is een nieuw hoofdstuk. Klik op Bewerken om inhoud toe te voegen.</p>
+          {editor && (
+            <button
+              onClick={() => setShowEditor(true)}
+              className="inline-flex items-center gap-2 bg-amber-500 text-white font-bold px-5 py-3 rounded-2xl text-sm"
+            >
+              ✏️ Bewerken
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="max-w-lg mx-auto px-4 py-6 pb-32">
-        {chapter.verse && (
+        {/* Static verse OR dynamic verse from overrides */}
+        {(chapter.verse || dynamicVerseRef) && (
           <div className="bg-amber-50 border-l-4 border-amber-400 rounded-r-2xl px-4 py-3 mb-5">
-            {chapter.verse.pretext && <p className="text-xs text-amber-600 mb-1 italic">{txt('verse.pretext', chapter.verse.pretext)}</p>}
-            <p className="text-xs font-bold text-amber-700 mb-1">{txt('verse.ref', chapter.verse.ref)}</p>
-            {renderContent(txt('verse.text', chapter.verse.text), 'text-sm text-amber-900 italic leading-relaxed')}
+            {(chapter.verse?.pretext || overrides[ck('verse.pretext')]) && (
+              <p className="text-xs text-amber-600 mb-1 italic">
+                {txt('verse.pretext', chapter.verse?.pretext ?? '')}
+              </p>
+            )}
+            <p className="text-xs font-bold text-amber-700 mb-1">
+              {txt('verse.ref', chapter.verse?.ref ?? '')}
+            </p>
+            {renderContent(txt('verse.text', chapter.verse?.text ?? ''), 'text-sm text-amber-900 italic leading-relaxed')}
           </div>
         )}
 
@@ -329,7 +380,7 @@ export default function ChapterPage() {
           </div>
         )}
 
-        {chapter.intro && introValue && (
+        {(chapter.intro !== undefined || (isDynamic && introValue)) && introValue && (
           <div className="bg-white rounded-2xl p-4 border border-stone-100 mb-5">
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-2">Wat zien we hier?</h3>
             {renderContent(introValue, 'text-sm text-stone-700 leading-relaxed mb-2 last:mb-0')}
@@ -398,6 +449,7 @@ export default function ChapterPage() {
           deelLetter={deel.letter}
           deelColor={deel.color}
           overrides={overrides}
+          isDynamic={isDynamic}
           onSaved={updates => setOverrides(prev => ({ ...prev, ...updates }))}
           onClose={() => setShowEditor(false)}
         />

@@ -3,6 +3,11 @@ import { prisma } from '@/lib/prisma'
 import { isEditor } from '@/lib/roles'
 
 export async function GET(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get('id')
+  if (id) {
+    const chapter = await prisma.dynamicChapter.findUnique({ where: { id } })
+    return NextResponse.json({ chapter })
+  }
   const deelId = req.nextUrl.searchParams.get('deelId')
   if (!deelId) return NextResponse.json({ chapters: [] })
   const chapters = await prisma.dynamicChapter.findMany({
