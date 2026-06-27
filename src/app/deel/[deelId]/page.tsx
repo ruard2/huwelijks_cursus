@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { getDeel } from '@/content'
+import { isEditor } from '@/lib/roles'
+import { renderContent } from '@/lib/renderContent'
+import DeelEditor from '@/components/DeelEditor'
 
 interface ProgressEntry {
   memberId: string
@@ -20,6 +23,8 @@ export default function DeelPage() {
 
   const [session, setSessionData] = useState<ReturnType<typeof getSession>>(null)
   const [progress, setProgress] = useState<ProgressEntry[]>([])
+  const [overrides, setOverrides] = useState<Record<string, string>>({})
+  const [showEditor, setShowEditor] = useState(false)
 
   useEffect(() => {
     const s = getSession()
@@ -28,7 +33,10 @@ export default function DeelPage() {
     fetch(`/api/progress?memberId=${s.memberId}`)
       .then(r => r.json())
       .then(data => setProgress(data.progress ?? []))
-  }, [router])
+    fetch(`/api/content?prefix=deel:${deelId}:`)
+      .then(r => r.json())
+      .then(data => setOverrides(data.overrides ?? {}))
+  }, [router, deelId])
 
   if (!deel) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -38,6 +46,12 @@ export default function DeelPage() {
 
   if (!session) return null
 
+  const editor = isEditor(session.memberName)
+  const ck = (suffix: string) => `deel:${deelId}:${suffix}`
+  const t = (key: string, fallback: string) => overrides[ck(key)] ?? fallback
+  const deelTitle = t('title', deel.title)
+  const deelIntro = t('intro', deel.intro)
+
   function isChapterDone(chapterId: string, memberId: string) {
     return progress.some(p => p.chapterId === chapterId && p.memberId === memberId && p.done)
   }
@@ -46,23 +60,29 @@ export default function DeelPage() {
     <div className="min-h-screen bg-stone-50">
       {/* Header */}
       <div className="bg-white border-b border-stone-100 px-5 py-3 flex items-center gap-3 sticky top-0 z-10">
-        <button onClick={() => router.back()} className="text-stone-400 p-1 -ml-1 text-sm">
-          ←
-        </button>
-        <div className="min-w-0">
+        <button onClick={() => router.back()} className="text-stone-400 p-1 -ml-1 text-sm">←</button>
+        <div className="min-w-0 flex-1">
           {deel.letter && (
             <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: deel.color }}>
               Deel {deel.letter}
             </p>
           )}
-          <p className="text-sm font-bold text-stone-900 leading-tight truncate">{deel.title}</p>
+          <p className="text-sm font-bold text-stone-900 leading-tight truncate">{deelTitle}</p>
         </div>
+        {editor && (
+          <button
+            onClick={() => setShowEditor(true)}
+            className="shrink-0 flex items-center gap-1 bg-amber-100 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-xl"
+          >
+            ✏️ Bewerken
+          </button>
+        )}
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-6">
         {/* Intro card */}
         <div className="bg-white rounded-2xl border border-stone-100 p-5 mb-6">
-          <p className="text-stone-600 text-sm leading-relaxed">{deel.intro}</p>
+          {renderContent(deelIntro, 'text-stone-600 text-sm leading-relaxed')}
         </div>
 
         {/* Chapter list */}
@@ -75,24 +95,20 @@ export default function DeelPage() {
             const partnerEntry = progress.find(
               p => p.chapterId === ch.id && p.memberId !== session.memberId && p.done
             )
-
             return (
               <button
                 key={ch.id}
                 onClick={() => router.push(`/chapter/${ch.id}`)}
                 className="w-full text-left bg-white rounded-2xl border border-stone-100 px-5 py-4 flex items-center gap-4 active:scale-[0.98] transition-transform"
               >
-                {/* Number circle */}
                 <span
                   className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
                   style={myDone
                     ? { backgroundColor: deel.color, color: 'white' }
-                    : { backgroundColor: '#f5f5f4', color: '#a8a29e' }
-                  }
+                    : { backgroundColor: '#f5f5f4', color: '#a8a29e' }}
                 >
                   {myDone ? '✓' : idx + 1}
                 </span>
-
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-stone-900 leading-snug">{ch.title}</p>
                   {ch.verse && (
@@ -104,13 +120,21 @@ export default function DeelPage() {
                     </p>
                   )}
                 </div>
-
                 <span className="text-stone-300 shrink-0">›</span>
               </button>
             )
           })}
         </div>
       </div>
+
+      {showEditor && (
+        <DeelEditor
+          deel={deel}
+          overrides={overrides}
+          onSaved={updates => setOverrides(prev => ({ ...prev, ...updates }))}
+          onClose={() => setShowEditor(false)}
+        />
+      )}
     </div>
   )
 }
