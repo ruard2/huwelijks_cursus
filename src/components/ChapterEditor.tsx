@@ -30,8 +30,6 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
         d['verse.pretext'] = t('verse.pretext', chapter.verse?.pretext ?? '')
       }
     }
-    d['verse2.ref'] = overrides[ck('verse2.ref')] ?? ''
-    d['verse2.text'] = overrides[ck('verse2.text')] ?? ''
     d['verdieping'] = overrides[ck('verdieping')] ?? ''
     if (chapter.intro !== undefined || isDynamic) {
       const stored = overrides[ck('intro')]
@@ -139,26 +137,6 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
               <RichEditor
                 value={draft['verse.text'] ?? ''}
                 onChange={v => set('verse.text', v)}
-                placeholder="Bijbeltekst..."
-                minHeight="60px"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Second verse */}
-        {!isDynamic && (
-          <div className="bg-amber-50 rounded-2xl p-4 space-y-3 border border-amber-200">
-            <p className={labelCls} style={{ color: '#92400e' }}>Tweede bijbeltekst <span className="font-normal normal-case tracking-normal text-amber-500">(optioneel)</span></p>
-            <div>
-              <label className={labelCls}>Referentie</label>
-              <input type="text" value={draft['verse2.ref'] ?? ''} onChange={e => set('verse2.ref', e.target.value)} className={inputCls} placeholder="bijv. Johannes 3:16" />
-            </div>
-            <div>
-              <label className={labelCls}>Tekst</label>
-              <RichEditor
-                value={draft['verse2.text'] ?? ''}
-                onChange={v => set('verse2.text', v)}
                 placeholder="Bijbeltekst..."
                 minHeight="60px"
               />
