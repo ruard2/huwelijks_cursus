@@ -31,6 +31,7 @@ export default function HomePage() {
   const [tab, setTab] = useState<'home' | 'comments'>('home')
   const [comments, setComments] = useState<CommentEntry[]>([])
   const [showProfile, setShowProfile] = useState(false)
+  const [deelOverrides, setDeelOverrides] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const s = getSession()
@@ -38,6 +39,10 @@ export default function HomePage() {
     setSessionData(s)
     fetchProgress(s.memberId)
     if (isAdmin(s.memberName)) fetchComments(s.memberName)
+    fetch('/api/content?prefix=deel:')
+      .then(r => r.json())
+      .then(data => setDeelOverrides(data.overrides ?? {}))
+      .catch(() => {})
 
     const seen = localStorage.getItem('hc_order_notice')
     if (!seen) {
@@ -205,6 +210,9 @@ export default function HomePage() {
             const total = deel.chapters.length
             const allDone = total > 0 && done === total
             const pct = total > 0 ? (done / total) * 100 : 0
+            const deelTitle = deelOverrides[`deel:${deel.id}:title`] ?? deel.title
+            const rawIntro = deelOverrides[`deel:${deel.id}:intro`] ?? deel.intro
+            const deelIntroText = rawIntro.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 
             return (
               <button
@@ -222,8 +230,8 @@ export default function HomePage() {
                         Deel {deel.letter}
                       </p>
                     )}
-                    <p className="font-bold text-stone-900 text-sm leading-snug">{deel.title}</p>
-                    <p className="text-stone-400 text-xs mt-1 line-clamp-1">{deel.intro.slice(0, 80)}</p>
+                    <p className="font-bold text-stone-900 text-sm leading-snug">{deelTitle}</p>
+                    <p className="text-stone-400 text-xs mt-1 line-clamp-1">{deelIntroText.slice(0, 100)}</p>
                   </div>
                   {/* Right: progress */}
                   <div className="shrink-0 flex flex-col items-end gap-1.5">
