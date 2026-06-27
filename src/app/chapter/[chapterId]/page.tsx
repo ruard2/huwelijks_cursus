@@ -322,6 +322,13 @@ export default function ChapterPage() {
           </div>
         )}
 
+        {overrides[ck('verse2.ref')] && (
+          <div className="bg-amber-50 border-l-4 border-amber-400 rounded-r-2xl px-4 py-3 mb-5">
+            <p className="text-xs font-bold text-amber-700 mb-1">{overrides[ck('verse2.ref')]}</p>
+            {renderContent(overrides[ck('verse2.text')] ?? '', 'text-sm text-amber-900 italic leading-relaxed')}
+          </div>
+        )}
+
         {chapter.intro && introValue && (
           <div className="bg-white rounded-2xl p-4 border border-stone-100 mb-5">
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-2">Wat zien we hier?</h3>
