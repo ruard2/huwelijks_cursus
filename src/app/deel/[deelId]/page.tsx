@@ -15,6 +15,12 @@ interface ProgressEntry {
   done: boolean
 }
 
+interface DynamicChapter {
+  id: string
+  deelId: string
+  order: number
+}
+
 export default function DeelPage() {
   const router = useRouter()
   const params = useParams()
@@ -25,6 +31,9 @@ export default function DeelPage() {
   const [progress, setProgress] = useState<ProgressEntry[]>([])
   const [overrides, setOverrides] = useState<Record<string, string>>({})
   const [showEditor, setShowEditor] = useState(false)
+  const [dynamicChapters, setDynamicChapters] = useState<DynamicChapter[]>([])
+  const [chapterOverrides, setChapterOverrides] = useState<Record<string, string>>({})
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     const s = getSession()
@@ -36,7 +45,39 @@ export default function DeelPage() {
     fetch(`/api/content?prefix=deel:${deelId}:`)
       .then(r => r.json())
       .then(data => setOverrides(data.overrides ?? {}))
+    fetchDynamicChapters()
   }, [router, deelId])
+
+  async function fetchDynamicChapters() {
+    const res = await fetch(`/api/chapters?deelId=${deelId}`)
+    if (!res.ok) return
+    const data = await res.json()
+    const chapters: DynamicChapter[] = data.chapters ?? []
+    setDynamicChapters(chapters)
+    if (chapters.length > 0) {
+      const ids = chapters.map((c: DynamicChapter) => c.id).join(',')
+      const r2 = await fetch(`/api/content?prefix=ch:&ids=${ids}`)
+      if (r2.ok) {
+        const d2 = await r2.json()
+        setChapterOverrides(d2.overrides ?? {})
+      }
+    }
+  }
+
+  async function createChapter() {
+    if (!session) return
+    setCreating(true)
+    const res = await fetch('/api/chapters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-member-name': session.memberName },
+      body: JSON.stringify({ deelId }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      router.push(`/chapter/${data.chapter.id}`)
+    }
+    setCreating(false)
+  }
 
   if (!deel) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -55,6 +96,16 @@ export default function DeelPage() {
   function isChapterDone(chapterId: string, memberId: string) {
     return progress.some(p => p.chapterId === chapterId && p.memberId === memberId && p.done)
   }
+
+  const allChapters = [
+    ...deel.chapters.map((ch, idx) => ({ id: ch.id, title: ch.title, verse: ch.verse?.ref, idx })),
+    ...dynamicChapters.map((dc, i) => ({
+      id: dc.id,
+      title: chapterOverrides[`ch:${dc.id}:title`] ?? 'Nieuw hoofdstuk',
+      verse: undefined,
+      idx: deel.chapters.length + i,
+    })),
+  ]
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -90,7 +141,7 @@ export default function DeelPage() {
           Hoofdstukken in dit blok
         </p>
         <div className="space-y-2">
-          {deel.chapters.map((ch, idx) => {
+          {allChapters.map((ch) => {
             const myDone = isChapterDone(ch.id, session.memberId)
             const partnerEntry = progress.find(
               p => p.chapterId === ch.id && p.memberId !== session.memberId && p.done
@@ -107,12 +158,12 @@ export default function DeelPage() {
                     ? { backgroundColor: deel.color, color: 'white' }
                     : { backgroundColor: '#f5f5f4', color: '#a8a29e' }}
                 >
-                  {myDone ? '✓' : idx + 1}
+                  {myDone ? '✓' : ch.idx + 1}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-stone-900 leading-snug">{ch.title}</p>
                   {ch.verse && (
-                    <p className="text-xs text-stone-400 mt-0.5 italic truncate">{ch.verse.ref}</p>
+                    <p className="text-xs text-stone-400 mt-0.5 italic truncate">{ch.verse}</p>
                   )}
                   {partnerEntry && (
                     <p className="text-xs mt-1" style={{ color: deel.color }}>
@@ -124,6 +175,18 @@ export default function DeelPage() {
               </button>
             )
           })}
+
+          {/* Add chapter button for editors */}
+          {editor && (
+            <button
+              onClick={createChapter}
+              disabled={creating}
+              className="w-full text-left bg-stone-50 border-2 border-dashed border-stone-200 rounded-2xl px-5 py-4 flex items-center gap-3 text-stone-400 hover:border-stone-300 hover:text-stone-500 transition-colors disabled:opacity-50"
+            >
+              <span className="w-8 h-8 rounded-full bg-stone-200 flex items-center justify-center text-stone-400 text-lg font-light shrink-0">+</span>
+              <span className="text-sm font-medium">{creating ? 'Aanmaken...' : 'Voeg hoofdstuk toe'}</span>
+            </button>
+          )}
         </div>
       </div>
 

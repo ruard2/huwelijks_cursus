@@ -67,3 +67,10 @@ model Comment {
   createdAt DateTime @default(now())
   member    Member   @relation(fields: [memberId], references: [id])
 }
+
+model DynamicChapter {
+  id        String   @id @default(cuid())
+  deelId    String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+}

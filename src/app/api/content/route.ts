@@ -4,8 +4,13 @@ import { isEditor } from '@/lib/roles'
 
 export async function GET(req: NextRequest) {
   const prefix = req.nextUrl.searchParams.get('prefix') ?? ''
+  const keysParam = req.nextUrl.searchParams.get('keys') ?? ''
+  const keys = keysParam ? keysParam.split(',').filter(Boolean) : []
+
   const overrides = await prisma.contentOverride.findMany({
-    where: prefix ? { key: { startsWith: prefix } } : undefined,
+    where: keys.length > 0
+      ? { key: { in: keys } }
+      : prefix ? { key: { startsWith: prefix } } : undefined,
   })
   const map: Record<string, string> = {}
   for (const o of overrides) map[o.key] = o.value

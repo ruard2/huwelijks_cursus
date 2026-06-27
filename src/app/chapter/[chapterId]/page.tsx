@@ -354,7 +354,7 @@ export default function ChapterPage() {
                 {renderContent(subsectionToShow.intro, 'text-sm text-stone-600 leading-relaxed mb-2')}
                 <div className="mt-4">
                   {subsectionToShow.sections
-                    .filter(s => !session.isSingle || s.type !== 'samen')
+                    .filter(s => editor || !session.isSingle || s.type !== 'samen')
                     .map(s => renderSection(s, subsectionToShow))}
                 </div>
               </div>
@@ -363,7 +363,7 @@ export default function ChapterPage() {
         )}
 
         {chapter.sections
-          .filter(s => !session.isSingle || s.type !== 'samen')
+          .filter(s => editor || !session.isSingle || s.type !== 'samen')
           .map(s => renderSection(s))}
 
         <div className="mt-6 pt-4 border-t border-stone-100">
