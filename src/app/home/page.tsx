@@ -32,6 +32,7 @@ export default function HomePage() {
   const [comments, setComments] = useState<CommentEntry[]>([])
   const [showProfile, setShowProfile] = useState(false)
   const [deelOverrides, setDeelOverrides] = useState<Record<string, string>>({})
+  const [hiddenChapters, setHiddenChapters] = useState<string[]>([])
 
   useEffect(() => {
     const s = getSession()
@@ -42,6 +43,10 @@ export default function HomePage() {
     fetch('/api/content?prefix=deel:')
       .then(r => r.json())
       .then(data => setDeelOverrides(data.overrides ?? {}))
+      .catch(() => {})
+    fetch('/api/content?keys=app:hidden-chapters')
+      .then(r => r.json())
+      .then(data => { try { setHiddenChapters(JSON.parse(data.overrides?.['app:hidden-chapters'] ?? '[]')) } catch { /* ignore */ } })
       .catch(() => {})
 
     const seen = localStorage.getItem('hc_order_notice')
@@ -76,11 +81,15 @@ export default function HomePage() {
     }
   }
 
+  function visibleChapters(deelId: string) {
+    const deel = DELEN.find(d => d.id === deelId)
+    if (!deel) return []
+    return deel.chapters.filter(c => !hiddenChapters.includes(c.id))
+  }
+
   function getDeelDone(deelId: string): number {
     if (!session) return 0
-    const deel = DELEN.find(d => d.id === deelId)
-    if (!deel) return 0
-    return deel.chapters.filter(c =>
+    return visibleChapters(deelId).filter(c =>
       progress.some(p => p.chapterId === c.id && p.memberId === session.memberId && p.done)
     ).length
   }
@@ -90,7 +99,7 @@ export default function HomePage() {
   const admin = isAdmin(session.memberName)
   const unreadCount = comments.filter(c => !c.read).length
 
-  const totalChapters = DELEN.reduce((sum, d) => sum + d.chapters.length, 0)
+  const totalChapters = DELEN.reduce((sum, d) => sum + visibleChapters(d.id).length, 0)
   const totalDone = DELEN.reduce((sum, d) => sum + getDeelDone(d.id), 0)
   const overallPct = totalChapters > 0 ? Math.round((totalDone / totalChapters) * 100) : 0
 
@@ -207,7 +216,7 @@ export default function HomePage() {
         <div className="space-y-2">
           {DELEN.map((deel) => {
             const done = getDeelDone(deel.id)
-            const total = deel.chapters.length
+            const total = visibleChapters(deel.id).length
             const allDone = total > 0 && done === total
             const pct = total > 0 ? (done / total) * 100 : 0
             const deelTitle = deelOverrides[`deel:${deel.id}:title`] ?? deel.title
