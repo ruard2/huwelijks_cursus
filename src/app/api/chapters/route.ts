@@ -29,6 +29,15 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ chapter })
 }
 
+export async function PATCH(req: NextRequest) {
+  const memberName = req.headers.get('x-member-name') ?? ''
+  if (!isEditor(memberName)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { id, deelId } = await req.json()
+  if (!id || !deelId) return NextResponse.json({ error: 'id and deelId required' }, { status: 400 })
+  const chapter = await prisma.dynamicChapter.update({ where: { id }, data: { deelId } })
+  return NextResponse.json({ chapter })
+}
+
 export async function DELETE(req: NextRequest) {
   const memberName = req.headers.get('x-member-name') ?? ''
   if (!isEditor(memberName)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

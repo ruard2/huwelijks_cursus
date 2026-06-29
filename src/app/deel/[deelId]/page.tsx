@@ -275,7 +275,7 @@ export default function DeelPage() {
         <DeelEditor
           deel={deel}
           overrides={overrides}
-          chapters={allChapters.map(ch => ({ id: ch.id, title: ch.title }))}
+          chapters={allChapters.map(ch => ({ id: ch.id, title: ch.title, isDynamic: ch.isDynamic }))}
           onSaved={updates => setOverrides(prev => ({ ...prev, ...updates }))}
           onClose={() => setShowEditor(false)}
         />
