@@ -147,6 +147,9 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
   const vsDragSrc = useRef<{sid: string; idx: number} | null>(null)
 
   const [bulkPaste, setBulkPaste] = useState<{key: string; text: string} | null>(null)
+  const [hiddenQuestions, setHiddenQuestions] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(overrides[ck('hidden-questions')] ?? '[]') as string[]) } catch { return new Set() }
+  })
 
   function parseBulkLines(text: string): string[] {
     return text.split('\n').map(l => l.replace(/^[\s•‣◦\-\*]+/, '').trim()).filter(l => l.length > 0)
@@ -196,6 +199,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
         JSON.stringify((extraQuestions[s.id] ?? []).filter(q => q.text.trim())),
       ] as [string, string]),
       ['extra-sections', JSON.stringify(virtualSections.map(vs => ({ ...vs, questions: vs.questions.filter(q => q.text.trim()) })).filter(vs => vs.title.trim()))],
+      ['hidden-questions', JSON.stringify([...hiddenQuestions])],
     ]
     const entries: [string, string][] = [...Object.entries(draft), ['bronnen', bronnenValue], ...extraEntries]
     await Promise.all(entries.map(([key, value]) =>
@@ -373,13 +377,18 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                 />
               </div>
             )}
-            {s.questions.map((q, qi) => {
+            {s.questions.filter(q => !hiddenQuestions.has(`s:${s.id}.q:${q.id}`)).map((q, qi) => {
               const hintKey = `s:${s.id}.q:${q.id}.hint`
               const hasStaticHint = q.hint !== undefined
               const hintExpanded = hasStaticHint || expandedHints.has(hintKey)
               return (
               <div key={q.id} className="pl-3 border-l-2 border-stone-100 space-y-2">
-                <p className={labelCls}>Vraag {qi + 1}</p>
+                <div className="flex items-center justify-between">
+                  <p className={labelCls}>Vraag {qi + 1}</p>
+                  <button type="button"
+                    onClick={() => setHiddenQuestions(prev => new Set(prev).add(`s:${s.id}.q:${q.id}`))}
+                    className="text-[10px] text-red-400 hover:text-red-500">verwijderen</button>
+                </div>
                 <div>
                   <label className="block text-[10px] text-stone-400 mb-0.5">Vraagtekst</label>
                   <input type="text" value={draft[`s:${s.id}.q:${q.id}.text`] ?? ''} onChange={e => set(`s:${s.id}.q:${q.id}.text`, e.target.value)} className={inputCls} />
@@ -414,6 +423,16 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                 )}
               </div>
             )})}
+
+            {/* Restore hidden static questions */}
+            {s.questions.filter(q => hiddenQuestions.has(`s:${s.id}.q:${q.id}`)).map(q => (
+              <div key={q.id} className="pl-3 border-l-2 border-red-100 flex items-center justify-between py-1 opacity-50">
+                <p className="text-[10px] text-stone-400 truncate line-through">{q.text}</p>
+                <button type="button"
+                  onClick={() => setHiddenQuestions(prev => { const n = new Set(prev); n.delete(`s:${s.id}.q:${q.id}`); return n })}
+                  className="text-[10px] text-stone-400 hover:text-stone-600 shrink-0 ml-2">herstel</button>
+              </div>
+            ))}
 
             {/* Extra questions added by editors */}
             {(extraQuestions[s.id] ?? []).map((eq, idx) => (

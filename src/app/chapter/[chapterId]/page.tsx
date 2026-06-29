@@ -416,7 +416,10 @@ export default function ChapterPage() {
       try { return JSON.parse(overrides[extraKey] ?? '[]') } catch { return [] }
     })()
 
-    if (section.questions.length === 0 && extraQuestions.length === 0) return null
+    const hiddenQs: string[] = (() => { try { return JSON.parse(overrides[ck('hidden-questions')] ?? '[]') } catch { return [] } })()
+    const visibleQuestions = section.questions.filter(q => !hiddenQs.includes(`s:${section.id}.q:${q.id}`))
+
+    if (visibleQuestions.length === 0 && extraQuestions.length === 0) return null
 
     const sectionKey = subsection ? `${subsection.id}:${section.id}` : section.id
     const isOpen = openSections.has(sectionKey)
@@ -461,7 +464,7 @@ export default function ChapterPage() {
         {isOpen && (
           <div className={`mt-1 rounded-2xl border p-4 ${bg}`}>
             {sectionIntro && renderContent(sectionIntro, 'text-xs text-stone-500 mb-3 italic leading-relaxed')}
-            {section.questions.map(q => renderQuestion(q, section, subsection))}
+            {visibleQuestions.map(q => renderQuestion(q, section, subsection))}
             {extraQuestions.map(eq => {
               const qKey = subsection ? `${subsection.id}.${eq.id}` : `${section.id}.${eq.id}`
               return renderExtraQ(eq, qKey, section.type)
@@ -530,6 +533,7 @@ export default function ChapterPage() {
 
         {(chapter.intro !== undefined || (isDynamic && introValue)) && introValue && (
           <div className="bg-white rounded-2xl p-4 border border-stone-100 mb-5">
+            <h1 className="text-xl font-bold text-stone-900 mb-3 leading-tight">{chapterTitle}</h1>
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-2">Wat zien we hier?</h3>
             {renderContent(introValue, 'text-sm text-stone-700 leading-relaxed mb-2 last:mb-0')}
           </div>
