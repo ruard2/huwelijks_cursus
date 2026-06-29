@@ -308,6 +308,11 @@ export default function ChapterPage() {
     const sectionTitle = txt(`${prefix}.title`, section.title)
     const sectionIntro = section.intro ? txt(`${prefix}.intro`, section.intro) : null
 
+    const extraKey = ck(subsection ? `sub:${subsection.id}.s:${section.id}:extra-questions` : `s:${section.id}:extra-questions`)
+    const extraQuestions: { id: string; text: string; hint: string }[] = (() => {
+      try { return JSON.parse(overrides[extraKey] ?? '[]') } catch { return [] }
+    })()
+
     return (
       <div key={section.id} className={`mb-5 rounded-2xl border p-4 ${bgMap[section.type] ?? 'bg-white border-stone-200'}`}>
         <h3 className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${labelMap[section.type] ?? 'text-stone-500'}`}>
@@ -315,6 +320,35 @@ export default function ChapterPage() {
         </h3>
         {sectionIntro && renderContent(sectionIntro, 'text-xs text-stone-500 mb-3 italic leading-relaxed')}
         {section.questions.map(q => renderQuestion(q, section, subsection))}
+        {extraQuestions.map(eq => {
+          const qKey = subsection ? `${subsection.id}.${eq.id}` : `${section.id}.${eq.id}`
+          const myAnswer = answers[qKey]?.mine
+          const partnerAnswer = answers[qKey]?.partner
+          const isPrivate = myAnswer?.isPrivate ?? false
+          return (
+            <div key={eq.id} className="mb-5">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <p className="text-sm font-medium text-stone-700">{eq.text}</p>
+                <button onClick={() => {
+                  const newPrivate = !isPrivate
+                  const value = myAnswer?.value ?? ''
+                  setAnswers(prev => ({ ...prev, [qKey]: { ...prev[qKey], mine: { ...(prev[qKey]?.mine ?? {}), questionId: qKey, value, isPrivate: newPrivate } as AnswerRecord } }))
+                  saveAnswer(qKey, value, newPrivate)
+                }} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
+              </div>
+              {eq.hint && <p className="text-xs text-stone-400 mb-2">{eq.hint}</p>}
+              <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
+                placeholder="Jouw antwoord..."
+                className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
+              {partnerAnswer?.value && (
+                <div className="mt-2 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
+                  <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerAnswer.memberName}</p>
+                  <p className="text-sm text-stone-700 whitespace-pre-wrap">{partnerAnswer.value}</p>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     )
   }

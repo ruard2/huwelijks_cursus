@@ -65,6 +65,35 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
     return d
   })
 
+  interface ExtraQ { id: string; text: string; hint: string }
+
+  // Extra questions added by editors per section
+  const [extraQuestions, setExtraQuestions] = useState<Record<string, ExtraQ[]>>(() => {
+    const map: Record<string, ExtraQ[]> = {}
+    chapter.sections.forEach(s => {
+      const raw = overrides[ck(`s:${s.id}:extra-questions`)]
+      if (raw) { try { map[s.id] = JSON.parse(raw) } catch { /* ignore */ } }
+    })
+    return map
+  })
+
+  function addExtraQuestion(sectionId: string) {
+    const newQ: ExtraQ = { id: `eq${Date.now()}`, text: '', hint: '' }
+    setExtraQuestions(prev => ({ ...prev, [sectionId]: [...(prev[sectionId] ?? []), newQ] }))
+  }
+  function updateExtraQuestion(sectionId: string, idx: number, field: 'text' | 'hint', val: string) {
+    setExtraQuestions(prev => ({
+      ...prev,
+      [sectionId]: (prev[sectionId] ?? []).map((q, i) => i === idx ? { ...q, [field]: val } : q),
+    }))
+  }
+  function removeExtraQuestion(sectionId: string, idx: number) {
+    setExtraQuestions(prev => ({
+      ...prev,
+      [sectionId]: (prev[sectionId] ?? []).filter((_, i) => i !== idx),
+    }))
+  }
+
   // Track which question hint fields are expanded (for questions without a static hint)
   const [expandedHints, setExpandedHints] = useState<Set<string>>(() => {
     const keys = new Set<string>()
@@ -96,7 +125,11 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
     setSaving(true)
     const session = getSession()
     const bronnenValue = JSON.stringify(bronnen.filter(b => b.title.trim()))
-    const entries: [string, string][] = [...Object.entries(draft), ['bronnen', bronnenValue]]
+    const extraEntries: [string, string][] = chapter.sections.map(s => [
+      `s:${s.id}:extra-questions`,
+      JSON.stringify((extraQuestions[s.id] ?? []).filter(q => q.text.trim())),
+    ])
+    const entries: [string, string][] = [...Object.entries(draft), ['bronnen', bronnenValue], ...extraEntries]
     await Promise.all(entries.map(([key, value]) =>
       fetch('/api/content', {
         method: 'POST',
@@ -313,6 +346,33 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                 )}
               </div>
             )})}
+
+            {/* Extra questions added by editors */}
+            {(extraQuestions[s.id] ?? []).map((eq, idx) => (
+              <div key={eq.id} className="pl-3 border-l-2 border-amber-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className={labelCls}>Extra vraag {idx + 1}</p>
+                  <button type="button" onClick={() => removeExtraQuestion(s.id, idx)}
+                    className="text-[10px] text-red-400 hover:text-red-500">verwijderen</button>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-stone-400 mb-0.5">Vraagtekst</label>
+                  <input type="text" value={eq.text}
+                    onChange={e => updateExtraQuestion(s.id, idx, 'text', e.target.value)}
+                    placeholder="Vraag..." className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-stone-400 mb-0.5">Toelichting (grijs, optioneel)</label>
+                  <input type="text" value={eq.hint}
+                    onChange={e => updateExtraQuestion(s.id, idx, 'hint', e.target.value)}
+                    placeholder="Denk aan..." className={inputCls} />
+                </div>
+              </div>
+            ))}
+            <button type="button" onClick={() => addExtraQuestion(s.id)}
+              className="w-full py-2 border-2 border-dashed border-amber-200 rounded-xl text-amber-500 text-xs font-medium hover:border-amber-300 transition-colors">
+              + Vraag toevoegen
+            </button>
           </div>
         ))}
 
