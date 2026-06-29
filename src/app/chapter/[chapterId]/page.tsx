@@ -211,6 +211,7 @@ export default function ChapterPage() {
     if (q.type === 'checkbox' && q.options) {
       const selected = myAnswer?.value ? JSON.parse(myAnswer.value) as string[] : []
       const partnerSelected = partnerAnswer?.value ? JSON.parse(partnerAnswer.value) as string[] : []
+      const showPartner = section?.type === 'samen' || selected.length > 0
       function toggleOption(opt: string) {
         const newSelected = selected.includes(opt) ? selected.filter(s => s !== opt) : [...selected, opt]
         const value = JSON.stringify(newSelected)
@@ -227,7 +228,7 @@ export default function ChapterPage() {
           <div className="grid grid-cols-2 gap-2">
             {q.options.map(opt => {
               const isMine = selected.includes(opt)
-              const isPartner = partnerSelected.includes(opt)
+              const isPartner = showPartner && partnerSelected.includes(opt)
               return (
                 <button key={opt} onClick={() => toggleOption(opt)}
                   className={`text-left px-3 py-2 rounded-xl text-sm border transition-all ${isMine ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>
@@ -259,7 +260,7 @@ export default function ChapterPage() {
                     className="w-full px-4 py-3 pr-10 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300" />
                   <button onClick={() => togglePrivate(partKey)} className="absolute top-3 right-3 text-base">{partPrivate ? '🔒' : '👁'}</button>
                 </div>
-                {partnerPart?.value && (
+                {partnerPart?.value && (section?.type === 'samen' || !!myPart?.value) && (
                   <div className="mt-1 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
                     <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerPart.memberName}</p>
                     <p className="text-sm text-stone-700">{partnerPart.value}</p>
@@ -282,7 +283,7 @@ export default function ChapterPage() {
         <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
           placeholder={q.placeholder ?? 'Jouw antwoord...'}
           className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
-        {partnerAnswer?.value && (
+        {partnerAnswer?.value && (section?.type === 'samen' || !!myAnswer?.value) && (
           <div className="mt-2 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
             <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerAnswer.memberName}</p>
             <p className="text-sm text-stone-700 whitespace-pre-wrap">{partnerAnswer.value}</p>
@@ -292,10 +293,11 @@ export default function ChapterPage() {
     )
   }
 
-  function renderExtraQ(eq: { id: string; text: string; hint: string; type?: string; options?: string[]; min?: number; max?: number }, qKey: string) {
+  function renderExtraQ(eq: { id: string; text: string; hint: string; type?: string; options?: string[]; min?: number; max?: number }, qKey: string, sectionType?: string) {
     const myAnswer = answers[qKey]?.mine
     const partnerAnswer = answers[qKey]?.partner
     const isPrivate = myAnswer?.isPrivate ?? false
+    const showPartner = sectionType === 'samen' || !!myAnswer?.value
     const togglePriv = () => {
       const newPrivate = !isPrivate
       const value = myAnswer?.value ?? ''
@@ -337,7 +339,7 @@ export default function ChapterPage() {
             </div>
           </div>
         )}
-        {partnerAnswer?.value && (
+        {partnerAnswer?.value && showPartner && (
           <div className="mt-2 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
             <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerAnswer.memberName}</p>
             <p className="text-sm text-stone-700 whitespace-pre-wrap">{partnerAnswer.value}</p>
@@ -377,7 +379,7 @@ export default function ChapterPage() {
         {section.questions.map(q => renderQuestion(q, section, subsection))}
         {extraQuestions.map(eq => {
           const qKey = subsection ? `${subsection.id}.${eq.id}` : `${section.id}.${eq.id}`
-          return renderExtraQ(eq, qKey)
+          return renderExtraQ(eq, qKey, section.type)
         })}
       </div>
     )
@@ -512,7 +514,7 @@ export default function ChapterPage() {
               .map(vs => (
                 <div key={vs.id} className={`mb-5 rounded-2xl border p-4 ${bgMap[vs.type] ?? 'bg-white border-stone-200'}`}>
                   <h3 className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${labelMap[vs.type] ?? 'text-stone-500'}`}>{vs.title}</h3>
-                  {vs.questions.map(q => renderExtraQ(q, `${vs.id}.${q.id}`))}
+                  {vs.questions.map(q => renderExtraQ(q, `${vs.id}.${q.id}`, vs.type))}
                 </div>
               ))
           } catch { return null }
