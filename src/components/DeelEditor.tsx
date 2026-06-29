@@ -6,6 +6,8 @@ import { DELEN } from '@/content'
 import type { Deel } from '@/content'
 import RichEditor from './RichEditor'
 
+
+
 interface ChapterItem { id: string; title: string; isDynamic: boolean }
 
 interface Props {
@@ -43,8 +45,24 @@ export default function DeelEditor({ deel, overrides, chapters, onSaved, onClose
 
   const dragIdx = useRef<number | null>(null)
   const [movingId, setMovingId] = useState<string | null>(null)
+  const [migrating, setMigrating] = useState(false)
 
   const otherDelen = DELEN.filter(d => d.id !== deel.id)
+
+  const migratedIds = new Set((chapters ?? []).map(c => c.id))
+  const unmigratedStatic = (DELEN.find(d => d.id === deel.id)?.chapters ?? []).filter(c => !migratedIds.has(c.id))
+
+  async function migrateStatic() {
+    setMigrating(true)
+    const session = getSession()
+    await fetch('/api/migrate-chapters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-member-name': session?.memberName ?? '' },
+      body: JSON.stringify({ deelId: deel.id }),
+    })
+    setMigrating(false)
+    window.location.reload()
+  }
 
   async function moveChapter(chapterId: string, targetDeelId: string) {
     const session = getSession()
@@ -162,6 +180,19 @@ export default function DeelEditor({ deel, overrides, chapters, onSaved, onClose
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {unmigratedStatic.length > 0 && (
+            <div className="border border-amber-200 bg-amber-50 rounded-2xl p-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-1">Statische hoofdstukken</p>
+              <p className="text-xs text-amber-700 mb-3">
+                {unmigratedStatic.length} hoofdstuk{unmigratedStatic.length !== 1 ? 'ken' : ''} staan nog in de oude code. Migreer ze naar dynamisch zodat alles via de editor werkt.
+              </p>
+              <button type="button" onClick={migrateStatic} disabled={migrating}
+                className="w-full py-2.5 bg-amber-500 text-white rounded-xl font-semibold text-sm disabled:opacity-50">
+                {migrating ? 'Migreren...' : `Migreer ${unmigratedStatic.length} hoofdstuk${unmigratedStatic.length !== 1 ? 'ken' : ''} naar dynamisch`}
+              </button>
             </div>
           )}
 

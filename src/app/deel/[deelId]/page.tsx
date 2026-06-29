@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { getSession } from '@/lib/session'
-import { getDeel } from '@/content'
+import { getDeel, getChapter } from '@/content'
 import { isEditor } from '@/lib/roles'
 import { renderContent } from '@/lib/renderContent'
 import DeelEditor from '@/components/DeelEditor'
@@ -66,8 +66,7 @@ export default function DeelPage() {
     const chapters: DynamicChapter[] = data.chapters ?? []
     setDynamicChapters(chapters)
     if (chapters.length > 0) {
-      // Fetch title overrides for each dynamic chapter
-      const titleKeys = chapters.map((c: DynamicChapter) => `ch:${c.id}:title`).join(',')
+      const titleKeys = chapters.flatMap((c: DynamicChapter) => [`ch:${c.id}:title`, `ch:${c.id}:verse.ref`]).join(',')
       const r2 = await fetch(`/api/content?keys=${encodeURIComponent(titleKeys)}`)
       if (r2.ok) {
         const d2 = await r2.json()
@@ -121,8 +120,9 @@ export default function DeelPage() {
     return progress.some(p => p.chapterId === chapterId && p.memberId === memberId && p.done)
   }
 
+  const dynChapterIds = new Set(dynamicChapters.map(dc => dc.id))
   const staticChapters = deel.chapters
-    .filter(ch => !hiddenChapters.includes(ch.id))
+    .filter(ch => !hiddenChapters.includes(ch.id) && !dynChapterIds.has(ch.id))
     .map((ch, idx) => ({
       id: ch.id,
       title: chapterOverrides[`ch:${ch.id}:title`] ?? ch.title,
@@ -130,13 +130,16 @@ export default function DeelPage() {
       idx,
       isDynamic: false,
     }))
-  const dynChapters = dynamicChapters.map((dc, i) => ({
-    id: dc.id,
-    title: chapterOverrides[`ch:${dc.id}:title`] ?? 'Nieuw hoofdstuk',
-    verse: undefined,
-    idx: deel.chapters.length + i,
-    isDynamic: true,
-  }))
+  const dynChapters = dynamicChapters.map((dc, i) => {
+    const staticCh = getChapter(dc.id)?.chapter
+    return {
+      id: dc.id,
+      title: chapterOverrides[`ch:${dc.id}:title`] ?? staticCh?.title ?? 'Nieuw hoofdstuk',
+      verse: chapterOverrides[`ch:${dc.id}:verse.ref`] ?? staticCh?.verse?.ref,
+      idx: deel.chapters.length + i,
+      isDynamic: true,
+    }
+  })
   const savedChapterOrder: string[] = (() => {
     try { return JSON.parse(overrides[`deel:${deelId}:chapter-order`] ?? '[]') } catch { return [] }
   })()
