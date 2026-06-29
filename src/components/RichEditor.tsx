@@ -47,6 +47,8 @@ export default function RichEditor({ value, onChange, placeholder, minHeight = '
         .rich-editor-content p { margin: 0 0 0.5em; line-height: 1.6; font-size: 0.875rem; }
         .rich-editor-content p:last-child { margin-bottom: 0; }
         .rich-editor-content p:empty::after { content: '\\00a0'; }
+        .rich-editor-content h2 { font-size: 1.15rem; font-weight: 700; margin: 0.4em 0 0.3em; line-height: 1.3; }
+        .rich-editor-content h3 { font-size: 1rem; font-weight: 600; margin: 0.3em 0 0.2em; line-height: 1.3; }
         .rich-editor-content ul { margin: 0.25em 0 0.5em 1.25em; list-style: disc; }
         .rich-editor-content li { margin-bottom: 0.25em; font-size: 0.875rem; line-height: 1.5; }
         .rich-editor-content strong { font-weight: 700; }
@@ -55,14 +57,23 @@ export default function RichEditor({ value, onChange, placeholder, minHeight = '
       `}</style>
       <div className="border border-stone-200 rounded-xl overflow-hidden bg-white focus-within:ring-2 focus-within:ring-amber-300">
         {/* Toolbar */}
-        <div className="flex items-center gap-1 px-2 py-1.5 border-b border-stone-100 bg-stone-50">
+        <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-stone-100 bg-stone-50">
+          {/* Size */}
+          <button type="button" onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleHeading({ level: 2 }).run() }}
+            className={`${btnBase} text-sm ${editor.isActive('heading', { level: 2 }) ? active : inactive}`}>Groot</button>
+          <button type="button" onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleHeading({ level: 3 }).run() }}
+            className={`${btnBase} ${editor.isActive('heading', { level: 3 }) ? active : inactive}`}>Klein</button>
+          <button type="button" onMouseDown={e => { e.preventDefault(); editor.chain().focus().setParagraph().run() }}
+            className={`${btnBase} ${editor.isActive('paragraph') && !editor.isActive('heading') ? active : inactive}`}>Norm</button>
+          <div className="w-px h-4 bg-stone-200 mx-0.5" />
+          {/* Style */}
           <button type="button" onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleBold().run() }}
             className={`${btnBase} font-bold ${editor.isActive('bold') ? active : inactive}`}>B</button>
           <button type="button" onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleItalic().run() }}
             className={`${btnBase} italic ${editor.isActive('italic') ? active : inactive}`}>I</button>
           <button type="button" onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleUnderline().run() }}
             className={`${btnBase} underline ${editor.isActive('underline') ? active : inactive}`}>U</button>
-          <div className="w-px h-4 bg-stone-200 mx-1" />
+          <div className="w-px h-4 bg-stone-200 mx-0.5" />
           <button type="button" onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleBulletList().run() }}
             className={`${btnBase} ${editor.isActive('bulletList') ? active : inactive}`}>•</button>
         </div>

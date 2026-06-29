@@ -49,7 +49,8 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
       if (s.intro) d[`s:${s.id}.intro`] = t(`s:${s.id}.intro`, s.intro)
       s.questions.forEach(q => {
         d[`s:${s.id}.q:${q.id}.text`] = t(`s:${s.id}.q:${q.id}.text`, q.text)
-        if (q.hint) d[`s:${s.id}.q:${q.id}.hint`] = t(`s:${s.id}.q:${q.id}.hint`, q.hint)
+        // Always load hint (even without static hint, an override may exist)
+        d[`s:${s.id}.q:${q.id}.hint`] = t(`s:${s.id}.q:${q.id}.hint`, q.hint ?? '')
         if (q.value) d[`s:${s.id}.q:${q.id}.value`] = t(`s:${s.id}.q:${q.id}.value`, q.value)
       })
     })
@@ -62,6 +63,26 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
       })
     })
     return d
+  })
+
+  // Track which question hint fields are expanded (for questions without a static hint)
+  const [expandedHints, setExpandedHints] = useState<Set<string>>(() => {
+    const keys = new Set<string>()
+    chapter.sections.forEach(s => {
+      s.questions.forEach(q => {
+        const hintKey = `s:${s.id}.q:${q.id}.hint`
+        if (overrides[ck(hintKey)]) keys.add(hintKey)
+      })
+    })
+    chapter.subsections?.forEach(sub => {
+      sub.sections.forEach(s => {
+        s.questions.forEach(q => {
+          const hintKey = `sub:${sub.id}.s:${s.id}.q:${q.id}.hint`
+          if (overrides[ck(hintKey)]) keys.add(hintKey)
+        })
+      })
+    })
+    return keys
   })
 
   const [saving, setSaving] = useState(false)
@@ -251,18 +272,34 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                 />
               </div>
             )}
-            {s.questions.map((q, qi) => (
+            {s.questions.map((q, qi) => {
+              const hintKey = `s:${s.id}.q:${q.id}.hint`
+              const hasStaticHint = q.hint !== undefined
+              const hintExpanded = hasStaticHint || expandedHints.has(hintKey)
+              return (
               <div key={q.id} className="pl-3 border-l-2 border-stone-100 space-y-2">
                 <p className={labelCls}>Vraag {qi + 1}</p>
                 <div>
                   <label className="block text-[10px] text-stone-400 mb-0.5">Vraagtekst</label>
                   <input type="text" value={draft[`s:${s.id}.q:${q.id}.text`] ?? ''} onChange={e => set(`s:${s.id}.q:${q.id}.text`, e.target.value)} className={inputCls} />
                 </div>
-                {q.hint !== undefined && (
+                {hintExpanded ? (
                   <div>
-                    <label className="block text-[10px] text-stone-400 mb-0.5">Toelichting (grijs)</label>
-                    <input type="text" value={draft[`s:${s.id}.q:${q.id}.hint`] ?? ''} onChange={e => set(`s:${s.id}.q:${q.id}.hint`, e.target.value)} className={inputCls} />
+                    <label className="block text-[10px] text-stone-400 mb-0.5">
+                      Toelichting (grijs, kleiner)
+                      {!hasStaticHint && (
+                        <button type="button" onClick={() => setExpandedHints(prev => { const n = new Set(prev); n.delete(hintKey); return n })}
+                          className="ml-2 text-red-300 hover:text-red-400">verwijderen</button>
+                      )}
+                    </label>
+                    <input type="text" value={draft[hintKey] ?? ''} onChange={e => set(hintKey, e.target.value)} className={inputCls} placeholder="Denk aan..." />
                   </div>
+                ) : (
+                  <button type="button"
+                    onClick={() => setExpandedHints(prev => new Set(prev).add(hintKey))}
+                    className="text-[10px] text-stone-400 hover:text-stone-600 border border-dashed border-stone-200 rounded-lg px-2 py-1 transition-colors">
+                    + Toelichting toevoegen
+                  </button>
                 )}
                 {q.value !== undefined && (
                   <div>
@@ -275,7 +312,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                   </div>
                 )}
               </div>
-            ))}
+            )})}
           </div>
         ))}
 

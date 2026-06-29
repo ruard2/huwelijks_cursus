@@ -193,7 +193,8 @@ export default function ChapterPage() {
       ? `sub:${subsection.id}.s:${section?.id}.q:${q.id}`
       : `s:${section?.id}.q:${q.id}`
     const qText = txt(`${prefix}.text`, q.text)
-    const qHint = q.hint ? txt(`${prefix}.hint`, q.hint) : undefined
+    const qHintRaw = txt(`${prefix}.hint`, q.hint ?? '')
+    const qHint = qHintRaw || undefined
 
     if (q.type === 'readonly') {
       const val = txt(`${prefix}.value`, q.value ?? '')
