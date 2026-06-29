@@ -292,6 +292,61 @@ export default function ChapterPage() {
     )
   }
 
+  function renderExtraQ(eq: { id: string; text: string; hint: string; type?: string; options?: string[]; min?: number; max?: number }, qKey: string) {
+    const myAnswer = answers[qKey]?.mine
+    const partnerAnswer = answers[qKey]?.partner
+    const isPrivate = myAnswer?.isPrivate ?? false
+    const togglePriv = () => {
+      const newPrivate = !isPrivate
+      const value = myAnswer?.value ?? ''
+      setAnswers(prev => ({ ...prev, [qKey]: { ...prev[qKey], mine: { ...(prev[qKey]?.mine ?? {}), questionId: qKey, value, isPrivate: newPrivate } as AnswerRecord } }))
+      saveAnswer(qKey, value, newPrivate)
+    }
+    return (
+      <div key={qKey} className="mb-5">
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <p className="text-sm font-medium text-stone-700">{eq.text}</p>
+          <button onClick={togglePriv} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
+        </div>
+        {eq.hint && <p className="text-xs text-stone-400 mb-2">{eq.hint}</p>}
+        {(!eq.type || eq.type === 'text') && (
+          <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
+            placeholder="Jouw antwoord..."
+            className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
+        )}
+        {eq.type === 'meerkeuze' && (eq.options ?? []).length > 0 && (
+          <div className="grid grid-cols-2 gap-2">
+            {(eq.options ?? []).map(opt => (
+              <button key={opt} onClick={() => handleChange(qKey, myAnswer?.value === opt ? '' : opt)}
+                className={`text-left px-3 py-2 rounded-xl text-sm border transition-all ${myAnswer?.value === opt ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>
+                {opt}
+              </button>
+            ))}
+          </div>
+        )}
+        {eq.type === 'slider' && (
+          <div className="px-1">
+            <input type="range" min={eq.min ?? 1} max={eq.max ?? 10} step={1}
+              value={myAnswer?.value ? Number(myAnswer.value) : (eq.min ?? 1)}
+              onChange={e => handleChange(qKey, e.target.value)}
+              className="w-full accent-stone-900" />
+            <div className="flex justify-between text-xs text-stone-400 mt-1">
+              <span>{eq.min ?? 1}</span>
+              <span className="font-semibold text-stone-700 text-sm">{myAnswer?.value || (eq.min ?? 1)}</span>
+              <span>{eq.max ?? 10}</span>
+            </div>
+          </div>
+        )}
+        {partnerAnswer?.value && (
+          <div className="mt-2 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
+            <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerAnswer.memberName}</p>
+            <p className="text-sm text-stone-700 whitespace-pre-wrap">{partnerAnswer.value}</p>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   function renderSection(section: Section, subsection: Subsection | null = null) {
     const bgMap: Record<string, string> = {
       personal: 'bg-stone-50 border-stone-200',
@@ -322,32 +377,7 @@ export default function ChapterPage() {
         {section.questions.map(q => renderQuestion(q, section, subsection))}
         {extraQuestions.map(eq => {
           const qKey = subsection ? `${subsection.id}.${eq.id}` : `${section.id}.${eq.id}`
-          const myAnswer = answers[qKey]?.mine
-          const partnerAnswer = answers[qKey]?.partner
-          const isPrivate = myAnswer?.isPrivate ?? false
-          return (
-            <div key={eq.id} className="mb-5">
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <p className="text-sm font-medium text-stone-700">{eq.text}</p>
-                <button onClick={() => {
-                  const newPrivate = !isPrivate
-                  const value = myAnswer?.value ?? ''
-                  setAnswers(prev => ({ ...prev, [qKey]: { ...prev[qKey], mine: { ...(prev[qKey]?.mine ?? {}), questionId: qKey, value, isPrivate: newPrivate } as AnswerRecord } }))
-                  saveAnswer(qKey, value, newPrivate)
-                }} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
-              </div>
-              {eq.hint && <p className="text-xs text-stone-400 mb-2">{eq.hint}</p>}
-              <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
-                placeholder="Jouw antwoord..."
-                className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
-              {partnerAnswer?.value && (
-                <div className="mt-2 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
-                  <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerAnswer.memberName}</p>
-                  <p className="text-sm text-stone-700 whitespace-pre-wrap">{partnerAnswer.value}</p>
-                </div>
-              )}
-            </div>
-          )
+          return renderExtraQ(eq, qKey)
         })}
       </div>
     )
@@ -482,35 +512,7 @@ export default function ChapterPage() {
               .map(vs => (
                 <div key={vs.id} className={`mb-5 rounded-2xl border p-4 ${bgMap[vs.type] ?? 'bg-white border-stone-200'}`}>
                   <h3 className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${labelMap[vs.type] ?? 'text-stone-500'}`}>{vs.title}</h3>
-                  {vs.questions.map(q => {
-                    const qKey = `${vs.id}.${q.id}`
-                    const myAnswer = answers[qKey]?.mine
-                    const partnerAnswer = answers[qKey]?.partner
-                    const isPrivate = myAnswer?.isPrivate ?? false
-                    return (
-                      <div key={q.id} className="mb-5">
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <p className="text-sm font-medium text-stone-700">{q.text}</p>
-                          <button onClick={() => {
-                            const newPrivate = !isPrivate
-                            const value = myAnswer?.value ?? ''
-                            setAnswers(prev => ({ ...prev, [qKey]: { ...prev[qKey], mine: { ...(prev[qKey]?.mine ?? {}), questionId: qKey, value, isPrivate: newPrivate } as AnswerRecord } }))
-                            saveAnswer(qKey, value, newPrivate)
-                          }} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
-                        </div>
-                        {q.hint && <p className="text-xs text-stone-400 mb-2">{q.hint}</p>}
-                        <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
-                          placeholder="Jouw antwoord..."
-                          className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
-                        {partnerAnswer?.value && (
-                          <div className="mt-2 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
-                            <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerAnswer.memberName}</p>
-                            <p className="text-sm text-stone-700 whitespace-pre-wrap">{partnerAnswer.value}</p>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                  {vs.questions.map(q => renderExtraQ(q, `${vs.id}.${q.id}`))}
                 </div>
               ))
           } catch { return null }
@@ -572,6 +574,7 @@ export default function ChapterPage() {
           isDynamic={isDynamic}
           onSaved={updates => setOverrides(prev => ({ ...prev, ...updates }))}
           onClose={() => setShowEditor(false)}
+          onDeleted={() => router.replace(`/deel/${chapter.deelId}`)}
         />
       )}
     </div>

@@ -14,6 +14,7 @@ interface Props {
   isDynamic?: boolean
   onSaved: (updates: Record<string, string>) => void
   onClose: () => void
+  onDeleted?: () => void
 }
 
 interface Bron { title: string; author: string; year: string }
@@ -22,7 +23,7 @@ function parseBronnen(raw: string): Bron[] {
   try { return JSON.parse(raw) } catch { return [] }
 }
 
-export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColor, overrides, isDynamic, onSaved, onClose }: Props) {
+export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColor, overrides, isDynamic, onSaved, onClose, onDeleted }: Props) {
   const ck = useCallback((suffix: string) => `ch:${chapter.id}:${suffix}`, [chapter.id])
   const t = (key: string, fallback: string) => overrides[ck(key)] ?? fallback
 
@@ -65,7 +66,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
     return d
   })
 
-  interface ExtraQ { id: string; text: string; hint: string }
+  interface ExtraQ { id: string; text: string; hint: string; type?: 'text' | 'meerkeuze' | 'slider'; options?: string[]; min?: number; max?: number }
   interface VirtualSection { id: string; type: 'personal' | 'samen' | 'reflection' | 'personal_man' | 'personal_vrouw'; title: string; questions: ExtraQ[] }
 
   // Extra questions added by editors per section
@@ -87,10 +88,10 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
     const newQ: ExtraQ = { id: `eq${Date.now()}`, text: '', hint: '' }
     setExtraQuestions(prev => ({ ...prev, [sectionId]: [...(prev[sectionId] ?? []), newQ] }))
   }
-  function updateExtraQuestion(sectionId: string, idx: number, field: 'text' | 'hint', val: string) {
+  function updateExtraQuestion(sectionId: string, idx: number, updates: Partial<ExtraQ>) {
     setExtraQuestions(prev => ({
       ...prev,
-      [sectionId]: (prev[sectionId] ?? []).map((q, i) => i === idx ? { ...q, [field]: val } : q),
+      [sectionId]: (prev[sectionId] ?? []).map((q, i) => i === idx ? { ...q, ...updates } : q),
     }))
   }
   function removeExtraQuestion(sectionId: string, idx: number) {
@@ -113,9 +114,9 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
     setVirtualSections(prev => prev.map(s => s.id === sectionId
       ? { ...s, questions: [...s.questions, { id: `vq${Date.now()}`, text: '', hint: '' }] } : s))
   }
-  function updateVirtualQuestion(sectionId: string, idx: number, field: 'text' | 'hint', value: string) {
+  function updateVirtualQuestion(sectionId: string, idx: number, updates: Partial<ExtraQ>) {
     setVirtualSections(prev => prev.map(s => s.id === sectionId
-      ? { ...s, questions: s.questions.map((q, i) => i === idx ? { ...q, [field]: value } : q) } : s))
+      ? { ...s, questions: s.questions.map((q, i) => i === idx ? { ...q, ...updates } : q) } : s))
   }
   function removeVirtualQuestion(sectionId: string, idx: number) {
     setVirtualSections(prev => prev.map(s => s.id === sectionId
@@ -144,6 +145,33 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
 
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function deleteChapter() {
+    const session = getSession()
+    if (!session) return
+    setDeleting(true)
+    if (isDynamic) {
+      await fetch('/api/chapters', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'x-member-name': session.memberName },
+        body: JSON.stringify({ id: chapter.id }),
+      })
+    } else {
+      const res = await fetch('/api/content?keys=app:hidden-chapters')
+      const data = await res.json()
+      const current: string[] = (() => { try { return JSON.parse(data.overrides?.['app:hidden-chapters'] ?? '[]') } catch { return [] } })()
+      if (!current.includes(chapter.id)) current.push(chapter.id)
+      await fetch('/api/content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-member-name': session.memberName },
+        body: JSON.stringify({ key: 'app:hidden-chapters', value: JSON.stringify(current) }),
+      })
+    }
+    setDeleting(false)
+    onDeleted?.()
+  }
 
   function set(key: string, value: string) {
     setDraft(prev => ({ ...prev, [key]: value }))
@@ -386,16 +414,55 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                   <button type="button" onClick={() => removeExtraQuestion(s.id, idx)}
                     className="text-[10px] text-red-400 hover:text-red-500">verwijderen</button>
                 </div>
-                <div>
-                  <label className="block text-[10px] text-stone-400 mb-0.5">Vraagtekst</label>
-                  <input type="text" value={eq.text}
-                    onChange={e => updateExtraQuestion(s.id, idx, 'text', e.target.value)}
-                    placeholder="Vraag..." className={inputCls} />
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-[10px] text-stone-400 mb-0.5">Vraagtekst</label>
+                    <input type="text" value={eq.text}
+                      onChange={e => updateExtraQuestion(s.id, idx, { text: e.target.value })}
+                      placeholder="Vraag..." className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-400 mb-0.5">Type</label>
+                    <select value={eq.type ?? 'text'}
+                      onChange={e => updateExtraQuestion(s.id, idx, { type: e.target.value as ExtraQ['type'] })}
+                      className="px-2 py-2 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300">
+                      <option value="text">Tekst</option>
+                      <option value="meerkeuze">Meerkeuze</option>
+                      <option value="slider">Slider</option>
+                    </select>
+                  </div>
                 </div>
+                {eq.type === 'meerkeuze' && (
+                  <div className="space-y-1">
+                    <label className="block text-[10px] text-stone-400 mb-0.5">Opties</label>
+                    {(eq.options ?? []).map((opt, oi) => (
+                      <div key={oi} className="flex gap-1">
+                        <input value={opt} onChange={e => { const o = [...(eq.options ?? [])]; o[oi] = e.target.value; updateExtraQuestion(s.id, idx, { options: o }) }}
+                          placeholder={`Optie ${oi + 1}`} className={inputCls} />
+                        <button type="button" onClick={() => updateExtraQuestion(s.id, idx, { options: (eq.options ?? []).filter((_, i) => i !== oi) })}
+                          className="w-7 h-7 rounded-full bg-red-50 text-red-400 text-sm flex items-center justify-center shrink-0">×</button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => updateExtraQuestion(s.id, idx, { options: [...(eq.options ?? []), ''] })}
+                      className="text-[10px] text-stone-400 border border-dashed border-stone-200 rounded-lg px-2 py-1 hover:text-stone-600">+ Optie toevoegen</button>
+                  </div>
+                )}
+                {eq.type === 'slider' && (
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-stone-400 mb-0.5">Min</label>
+                      <input type="number" value={eq.min ?? 1} onChange={e => updateExtraQuestion(s.id, idx, { min: parseInt(e.target.value) || 1 })} className={inputCls} />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-stone-400 mb-0.5">Max</label>
+                      <input type="number" value={eq.max ?? 10} onChange={e => updateExtraQuestion(s.id, idx, { max: parseInt(e.target.value) || 10 })} className={inputCls} />
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-[10px] text-stone-400 mb-0.5">Toelichting (grijs, optioneel)</label>
                   <input type="text" value={eq.hint}
-                    onChange={e => updateExtraQuestion(s.id, idx, 'hint', e.target.value)}
+                    onChange={e => updateExtraQuestion(s.id, idx, { hint: e.target.value })}
                     placeholder="Denk aan..." className={inputCls} />
                 </div>
               </div>
@@ -445,16 +512,55 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                     <button type="button" onClick={() => removeVirtualQuestion(vs.id, qi)}
                       className="text-[10px] text-red-400 hover:text-red-500">verwijderen</button>
                   </div>
-                  <div>
-                    <label className="block text-[10px] text-stone-400 mb-0.5">Vraagtekst</label>
-                    <input type="text" value={q.text}
-                      onChange={e => updateVirtualQuestion(vs.id, qi, 'text', e.target.value)}
-                      placeholder="Vraag..." className={inputCls} />
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-stone-400 mb-0.5">Vraagtekst</label>
+                      <input type="text" value={q.text}
+                        onChange={e => updateVirtualQuestion(vs.id, qi, { text: e.target.value })}
+                        placeholder="Vraag..." className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-stone-400 mb-0.5">Type</label>
+                      <select value={q.type ?? 'text'}
+                        onChange={e => updateVirtualQuestion(vs.id, qi, { type: e.target.value as ExtraQ['type'] })}
+                        className="px-2 py-2 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300">
+                        <option value="text">Tekst</option>
+                        <option value="meerkeuze">Meerkeuze</option>
+                        <option value="slider">Slider</option>
+                      </select>
+                    </div>
                   </div>
+                  {q.type === 'meerkeuze' && (
+                    <div className="space-y-1">
+                      <label className="block text-[10px] text-stone-400 mb-0.5">Opties</label>
+                      {(q.options ?? []).map((opt, oi) => (
+                        <div key={oi} className="flex gap-1">
+                          <input value={opt} onChange={e => { const o = [...(q.options ?? [])]; o[oi] = e.target.value; updateVirtualQuestion(vs.id, qi, { options: o }) }}
+                            placeholder={`Optie ${oi + 1}`} className={inputCls} />
+                          <button type="button" onClick={() => updateVirtualQuestion(vs.id, qi, { options: (q.options ?? []).filter((_, i) => i !== oi) })}
+                            className="w-7 h-7 rounded-full bg-red-50 text-red-400 text-sm flex items-center justify-center shrink-0">×</button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => updateVirtualQuestion(vs.id, qi, { options: [...(q.options ?? []), ''] })}
+                        className="text-[10px] text-stone-400 border border-dashed border-stone-200 rounded-lg px-2 py-1 hover:text-stone-600">+ Optie toevoegen</button>
+                    </div>
+                  )}
+                  {q.type === 'slider' && (
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="block text-[10px] text-stone-400 mb-0.5">Min</label>
+                        <input type="number" value={q.min ?? 1} onChange={e => updateVirtualQuestion(vs.id, qi, { min: parseInt(e.target.value) || 1 })} className={inputCls} />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-[10px] text-stone-400 mb-0.5">Max</label>
+                        <input type="number" value={q.max ?? 10} onChange={e => updateVirtualQuestion(vs.id, qi, { max: parseInt(e.target.value) || 10 })} className={inputCls} />
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-[10px] text-stone-400 mb-0.5">Toelichting (grijs, optioneel)</label>
                     <input type="text" value={q.hint}
-                      onChange={e => updateVirtualQuestion(vs.id, qi, 'hint', e.target.value)}
+                      onChange={e => updateVirtualQuestion(vs.id, qi, { hint: e.target.value })}
                       placeholder="Denk aan..." className={inputCls} />
                   </div>
                 </div>
@@ -492,6 +598,31 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
             ))}
           </div>
         ))}
+
+        {/* Danger zone */}
+        <div className="border border-red-100 rounded-2xl p-4">
+          <p className={`${labelCls} text-red-300`}>Hoofdstuk verwijderen</p>
+          {!confirmDelete ? (
+            <button type="button" onClick={() => setConfirmDelete(true)}
+              className="w-full py-2 text-sm text-red-400 border border-dashed border-red-200 rounded-xl hover:bg-red-50 transition-colors">
+              Verwijder dit hoofdstuk
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-stone-600">Weet je zeker? Dit kan niet ongedaan gemaakt worden.</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={deleteChapter} disabled={deleting}
+                  className="flex-1 py-2 bg-red-500 text-white rounded-xl text-sm font-semibold disabled:opacity-50">
+                  {deleting ? 'Verwijderen...' : 'Ja, verwijderen'}
+                </button>
+                <button type="button" onClick={() => setConfirmDelete(false)}
+                  className="flex-1 py-2 bg-stone-100 text-stone-600 rounded-xl text-sm">
+                  Annuleren
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="h-8" />
       </div>

@@ -35,6 +35,7 @@ export default function DeelPage() {
   const [chapterOverrides, setChapterOverrides] = useState<Record<string, string>>({})
   const [creating, setCreating] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [hiddenChapters, setHiddenChapters] = useState<string[]>([])
 
   useEffect(() => {
     const s = getSession()
@@ -46,6 +47,9 @@ export default function DeelPage() {
     fetch(`/api/content?prefix=deel:${deelId}:`)
       .then(r => r.json())
       .then(data => setOverrides(data.overrides ?? {}))
+    fetch('/api/content?keys=app:hidden-chapters')
+      .then(r => r.json())
+      .then(data => { try { setHiddenChapters(JSON.parse(data.overrides?.['app:hidden-chapters'] ?? '[]')) } catch { /* ignore */ } })
     fetchDynamicChapters()
   }, [router, deelId])
 
@@ -111,7 +115,9 @@ export default function DeelPage() {
     return progress.some(p => p.chapterId === chapterId && p.memberId === memberId && p.done)
   }
 
-  const staticChapters = deel.chapters.map((ch, idx) => ({ id: ch.id, title: ch.title, verse: ch.verse?.ref, idx, isDynamic: false }))
+  const staticChapters = deel.chapters
+    .filter(ch => !hiddenChapters.includes(ch.id))
+    .map((ch, idx) => ({ id: ch.id, title: ch.title, verse: ch.verse?.ref, idx, isDynamic: false }))
   const dynChapters = dynamicChapters.map((dc, i) => ({
     id: dc.id,
     title: chapterOverrides[`ch:${dc.id}:title`] ?? 'Nieuw hoofdstuk',
