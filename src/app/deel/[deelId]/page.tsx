@@ -186,7 +186,7 @@ export default function DeelPage() {
           Hoofdstukken in dit blok
         </p>
         <div className="space-y-2">
-          {allChapters.map((ch) => {
+          {allChapters.map((ch, displayIdx) => {
             const myDone = isChapterDone(ch.id, session.memberId)
             const partnerEntry = progress.find(
               p => p.chapterId === ch.id && p.memberId !== session.memberId && p.done
@@ -203,7 +203,7 @@ export default function DeelPage() {
                       ? { backgroundColor: deel.color, color: 'white' }
                       : { backgroundColor: '#f5f5f4', color: '#a8a29e' }}
                   >
-                    {myDone ? '✓' : ch.idx + 1}
+                    {myDone ? '✓' : displayIdx + 1}
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-stone-900 leading-snug">{ch.title}</p>
