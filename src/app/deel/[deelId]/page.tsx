@@ -71,7 +71,7 @@ export default function DeelPage() {
       const r2 = await fetch(`/api/content?keys=${encodeURIComponent(titleKeys)}`)
       if (r2.ok) {
         const d2 = await r2.json()
-        setChapterOverrides(d2.overrides ?? {})
+        setChapterOverrides(prev => ({ ...prev, ...(d2.overrides ?? {}) }))
       }
     }
   }
