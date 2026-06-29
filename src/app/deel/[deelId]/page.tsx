@@ -50,6 +50,12 @@ export default function DeelPage() {
     fetch('/api/content?keys=app:hidden-chapters')
       .then(r => r.json())
       .then(data => { try { setHiddenChapters(JSON.parse(data.overrides?.['app:hidden-chapters'] ?? '[]')) } catch { /* ignore */ } })
+    if (deel && deel.chapters.length > 0) {
+      const chKeys = deel.chapters.flatMap(ch => [`ch:${ch.id}:verse.ref`, `ch:${ch.id}:title`]).join(',')
+      fetch(`/api/content?keys=${encodeURIComponent(chKeys)}`)
+        .then(r => r.json())
+        .then(d => setChapterOverrides(prev => ({ ...prev, ...(d.overrides ?? {}) })))
+    }
     fetchDynamicChapters()
   }, [router, deelId])
 
@@ -117,7 +123,13 @@ export default function DeelPage() {
 
   const staticChapters = deel.chapters
     .filter(ch => !hiddenChapters.includes(ch.id))
-    .map((ch, idx) => ({ id: ch.id, title: ch.title, verse: ch.verse?.ref, idx, isDynamic: false }))
+    .map((ch, idx) => ({
+      id: ch.id,
+      title: chapterOverrides[`ch:${ch.id}:title`] ?? ch.title,
+      verse: chapterOverrides[`ch:${ch.id}:verse.ref`] ?? ch.verse?.ref,
+      idx,
+      isDynamic: false,
+    }))
   const dynChapters = dynamicChapters.map((dc, i) => ({
     id: dc.id,
     title: chapterOverrides[`ch:${dc.id}:title`] ?? 'Nieuw hoofdstuk',

@@ -32,13 +32,9 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
   const [draft, setDraft] = useState<Record<string, string>>(() => {
     const d: Record<string, string> = {}
     d['title'] = t('title', String(chapter.title))
-    if (chapter.verse || isDynamic) {
-      d['verse.ref'] = t('verse.ref', chapter.verse?.ref ?? '')
-      d['verse.text'] = t('verse.text', chapter.verse?.text ?? '')
-      if (chapter.verse?.pretext !== undefined || isDynamic) {
-        d['verse.pretext'] = t('verse.pretext', chapter.verse?.pretext ?? '')
-      }
-    }
+    d['verse.ref'] = t('verse.ref', chapter.verse?.ref ?? '')
+    d['verse.text'] = t('verse.text', chapter.verse?.text ?? '')
+    d['verse.pretext'] = t('verse.pretext', chapter.verse?.pretext ?? '')
     d['verdieping.title'] = overrides[ck('verdieping.title')] ?? ''
     d['verdieping'] = overrides[ck('verdieping')] ?? ''
     if (chapter.intro !== undefined || isDynamic) {
@@ -220,7 +216,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
   const inputCls = 'w-full px-3 py-2 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300'
   const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1'
 
-  const showVerse = !!(chapter.verse || isDynamic)
+  const showVerse = true
   const showIntro = chapter.intro !== undefined || isDynamic
 
   return (
