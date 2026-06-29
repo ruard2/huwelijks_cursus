@@ -316,16 +316,34 @@ export default function ChapterPage() {
             placeholder="Jouw antwoord..."
             className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
         )}
-        {eq.type === 'meerkeuze' && (eq.options ?? []).length > 0 && (
-          <div className="grid grid-cols-2 gap-2">
-            {(eq.options ?? []).map(opt => (
-              <button key={opt} onClick={() => handleChange(qKey, myAnswer?.value === opt ? '' : opt)}
-                className={`text-left px-3 py-2 rounded-xl text-sm border transition-all ${myAnswer?.value === opt ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>
-                {opt}
-              </button>
-            ))}
-          </div>
-        )}
+        {eq.type === 'meerkeuze' && (eq.options ?? []).length > 0 && (() => {
+          const andersActive = myAnswer?.value?.startsWith('Anders:') ?? false
+          return (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                {(eq.options ?? []).map(opt => {
+                  const isAnders = /^Anders:?\s*$/.test(opt.trim())
+                  const isSelected = isAnders ? andersActive : myAnswer?.value === opt
+                  return (
+                    <button key={opt}
+                      onClick={() => handleChange(qKey, isAnders ? (andersActive ? '' : 'Anders: ') : (isSelected ? '' : opt))}
+                      className={`text-left px-3 py-2 rounded-xl text-sm border transition-all ${isSelected ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`}>
+                      {opt}
+                    </button>
+                  )
+                })}
+              </div>
+              {andersActive && (
+                <input type="text"
+                  value={(myAnswer?.value ?? '').replace(/^Anders:\s*/, '')}
+                  onChange={e => handleChange(qKey, 'Anders: ' + e.target.value)}
+                  placeholder="Typ hier je eigen antwoord..."
+                  className="mt-2 w-full px-4 py-2 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300"
+                />
+              )}
+            </>
+          )
+        })()}
         {eq.type === 'slider' && (
           <div className="px-1">
             <input type="range" min={eq.min ?? 1} max={eq.max ?? 10} step={1}
@@ -366,9 +384,11 @@ export default function ChapterPage() {
     const sectionIntro = section.intro ? txt(`${prefix}.intro`, section.intro) : null
 
     const extraKey = ck(subsection ? `sub:${subsection.id}.s:${section.id}:extra-questions` : `s:${section.id}:extra-questions`)
-    const extraQuestions: { id: string; text: string; hint: string }[] = (() => {
+    const extraQuestions: { id: string; text: string; hint: string; type?: string; options?: string[]; min?: number; max?: number }[] = (() => {
       try { return JSON.parse(overrides[extraKey] ?? '[]') } catch { return [] }
     })()
+
+    if (section.questions.length === 0 && extraQuestions.length === 0) return null
 
     return (
       <div key={section.id} className={`mb-5 rounded-2xl border p-4 ${bgMap[section.type] ?? 'bg-white border-stone-200'}`}>

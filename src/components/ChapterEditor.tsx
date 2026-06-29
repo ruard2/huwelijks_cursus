@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { getSession } from '@/lib/session'
 import type { Chapter } from '@/content'
 import RichEditor from './RichEditor'
@@ -142,6 +142,9 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
     })
     return keys
   })
+
+  const eqDragSrc = useRef<{sid: string; idx: number} | null>(null)
+  const vsDragSrc = useRef<{sid: string; idx: number} | null>(null)
 
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -408,9 +411,26 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
 
             {/* Extra questions added by editors */}
             {(extraQuestions[s.id] ?? []).map((eq, idx) => (
-              <div key={eq.id} className="pl-3 border-l-2 border-amber-200 space-y-2">
+              <div key={eq.id}
+                draggable
+                onDragStart={e => { e.stopPropagation(); eqDragSrc.current = {sid: s.id, idx} }}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault()
+                  if (!eqDragSrc.current || eqDragSrc.current.sid !== s.id || eqDragSrc.current.idx === idx) return
+                  const items = [...(extraQuestions[s.id] ?? [])]
+                  const [item] = items.splice(eqDragSrc.current.idx, 1)
+                  items.splice(idx, 0, item)
+                  setExtraQuestions(prev => ({...prev, [s.id]: items}))
+                  eqDragSrc.current = null
+                }}
+                onDragEnd={() => { eqDragSrc.current = null }}
+                className="pl-3 border-l-2 border-amber-200 space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className={labelCls}>Extra vraag {idx + 1}</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-stone-300 cursor-grab select-none text-xs">⠿</span>
+                    <p className={labelCls}>Extra vraag {idx + 1}</p>
+                  </div>
                   <button type="button" onClick={() => removeExtraQuestion(s.id, idx)}
                     className="text-[10px] text-red-400 hover:text-red-500">verwijderen</button>
                 </div>
@@ -506,9 +526,29 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                 </div>
               </div>
               {vs.questions.map((q, qi) => (
-                <div key={q.id} className="pl-3 border-l-2 border-stone-100 space-y-2">
+                <div key={q.id}
+                  draggable
+                  onDragStart={e => { e.stopPropagation(); vsDragSrc.current = {sid: vs.id, idx: qi} }}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => {
+                    e.preventDefault()
+                    if (!vsDragSrc.current || vsDragSrc.current.sid !== vs.id || vsDragSrc.current.idx === qi) return
+                    setVirtualSections(prev => prev.map(s => {
+                      if (s.id !== vs.id) return s
+                      const items = [...s.questions]
+                      const [item] = items.splice(vsDragSrc.current!.idx, 1)
+                      items.splice(qi, 0, item)
+                      return {...s, questions: items}
+                    }))
+                    vsDragSrc.current = null
+                  }}
+                  onDragEnd={() => { vsDragSrc.current = null }}
+                  className="pl-3 border-l-2 border-stone-100 space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className={labelCls}>Vraag {qi + 1}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-stone-300 cursor-grab select-none text-xs">⠿</span>
+                      <p className={labelCls}>Vraag {qi + 1}</p>
+                    </div>
                     <button type="button" onClick={() => removeVirtualQuestion(vs.id, qi)}
                       className="text-[10px] text-red-400 hover:text-red-500">verwijderen</button>
                   </div>
