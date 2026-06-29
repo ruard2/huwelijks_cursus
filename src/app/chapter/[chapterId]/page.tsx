@@ -46,6 +46,7 @@ export default function ChapterPage() {
   const [activeSubsection, setActiveSubsection] = useState<string | null>(null)
   const [showVerdieping, setShowVerdieping] = useState(false)
   const [showExitDialog, setShowExitDialog] = useState(false)
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   const pusherRef = useRef<InstanceType<typeof Pusher> | null>(null)
   const channelRef = useRef<Channel | null>(null)
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -179,10 +180,35 @@ export default function ChapterPage() {
     router.back()
   }
 
+  async function markPersonalDone() {
+    const s = getSession()
+    if (!s) return
+    await saveAnswer('personal:done', 'true', false)
+    setAnswers(prev => ({
+      ...prev,
+      'personal:done': {
+        ...prev['personal:done'],
+        mine: { memberId: s.memberId, memberName: s.memberName, chapterId, questionId: 'personal:done', value: 'true', isPrivate: false },
+      }
+    }))
+  }
+
   if (!session || !chapterData) return null
   const { chapter, deel } = chapterData
   const editor = isEditor(session.memberName)
   const subsectionToShow = chapter.subsections?.find(s => s.id === activeSubsection)
+
+  const myPersonalDone = answers['personal:done']?.mine?.value === 'true'
+  const partnerPersonalDone = answers['personal:done']?.partner?.value === 'true'
+  const samenUnlocked = editor || (myPersonalDone && (session.isSingle || partnerPersonalDone))
+
+  function toggleSection(id: string) {
+    setOpenSections(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   function renderQuestion(q: Question, section: Section | null, subsection: Subsection | null) {
     const qKey = buildKey(section, subsection, q)
@@ -379,6 +405,8 @@ export default function ChapterPage() {
       personal: 'text-stone-500', samen: 'text-indigo-600', reflection: 'text-stone-500',
       personal_man: 'text-sky-600', personal_vrouw: 'text-rose-600',
     }
+    const bg = bgMap[section.type] ?? 'bg-white border-stone-200'
+    const label = labelMap[section.type] ?? 'text-stone-500'
     const prefix = subsection ? `sub:${subsection.id}.s:${section.id}` : `s:${section.id}`
     const sectionTitle = txt(`${prefix}.title`, section.title)
     const sectionIntro = section.intro ? txt(`${prefix}.intro`, section.intro) : null
@@ -390,17 +418,56 @@ export default function ChapterPage() {
 
     if (section.questions.length === 0 && extraQuestions.length === 0) return null
 
+    const sectionKey = subsection ? `${subsection.id}:${section.id}` : section.id
+    const isOpen = openSections.has(sectionKey)
+    const isSamen = section.type === 'samen'
+
+    if (isSamen && !samenUnlocked) {
+      return (
+        <div key={section.id} className="mb-5 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-4">
+          <h3 className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 mb-3">🔒 {sectionTitle}</h3>
+          <p className="text-xs text-indigo-500 mb-4">Beide partners moeten eerst de persoonlijke vragen afronden.</p>
+          <div className="space-y-2 mb-4">
+            <div className={`flex items-center gap-2 text-sm ${myPersonalDone ? 'text-green-600' : 'text-stone-400'}`}>
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${myPersonalDone ? 'bg-green-100 text-green-600' : 'bg-stone-100 text-stone-400'}`}>{myPersonalDone ? '✓' : '○'}</span>
+              Jij{myPersonalDone ? ' — klaar' : ''}
+            </div>
+            <div className={`flex items-center gap-2 text-sm ${partnerPersonalDone ? 'text-green-600' : 'text-stone-400'}`}>
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${partnerPersonalDone ? 'bg-green-100 text-green-600' : 'bg-stone-100 text-stone-400'}`}>{partnerPersonalDone ? '✓' : '○'}</span>
+              {answers['personal:done']?.partner?.memberName?.split(' ')[0] ?? 'Partner'}{partnerPersonalDone ? ' — klaar' : ''}
+            </div>
+          </div>
+          {!myPersonalDone && (
+            <button onClick={markPersonalDone} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-semibold text-sm active:scale-[0.98] transition-transform">
+              ✓ Ik ben klaar met persoonlijke vragen
+            </button>
+          )}
+          {myPersonalDone && !partnerPersonalDone && (
+            <p className="text-center text-xs text-indigo-400 mt-2">Wachten op je partner...</p>
+          )}
+        </div>
+      )
+    }
+
     return (
-      <div key={section.id} className={`mb-5 rounded-2xl border p-4 ${bgMap[section.type] ?? 'bg-white border-stone-200'}`}>
-        <h3 className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${labelMap[section.type] ?? 'text-stone-500'}`}>
-          {sectionTitle}
-        </h3>
-        {sectionIntro && renderContent(sectionIntro, 'text-xs text-stone-500 mb-3 italic leading-relaxed')}
-        {section.questions.map(q => renderQuestion(q, section, subsection))}
-        {extraQuestions.map(eq => {
-          const qKey = subsection ? `${subsection.id}.${eq.id}` : `${section.id}.${eq.id}`
-          return renderExtraQ(eq, qKey, section.type)
-        })}
+      <div key={section.id} className="mb-5">
+        <button
+          onClick={() => toggleSection(sectionKey)}
+          className={`w-full flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition-colors hover:brightness-[0.98] active:scale-[0.98] ${bg}`}
+        >
+          <h3 className={`text-[10px] font-bold uppercase tracking-widest ${label}`}>{sectionTitle}</h3>
+          <span className={`text-sm transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} ${label} opacity-60`}>▾</span>
+        </button>
+        {isOpen && (
+          <div className={`mt-1 rounded-2xl border p-4 ${bg}`}>
+            {sectionIntro && renderContent(sectionIntro, 'text-xs text-stone-500 mb-3 italic leading-relaxed')}
+            {section.questions.map(q => renderQuestion(q, section, subsection))}
+            {extraQuestions.map(eq => {
+              const qKey = subsection ? `${subsection.id}.${eq.id}` : `${section.id}.${eq.id}`
+              return renderExtraQ(eq, qKey, section.type)
+            })}
+          </div>
+        )}
       </div>
     )
   }
@@ -531,12 +598,55 @@ export default function ChapterPage() {
             return vSections
               .filter(vs => vs.questions.length > 0)
               .filter(vs => editor || !session.isSingle || vs.type !== 'samen')
-              .map(vs => (
-                <div key={vs.id} className={`mb-5 rounded-2xl border p-4 ${bgMap[vs.type] ?? 'bg-white border-stone-200'}`}>
-                  <h3 className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${labelMap[vs.type] ?? 'text-stone-500'}`}>{vs.title}</h3>
-                  {vs.questions.map(q => renderExtraQ(q, `${vs.id}.${q.id}`, vs.type))}
-                </div>
-              ))
+              .map(vs => {
+                const vsKey = `vs:${vs.id}`
+                const isOpen = openSections.has(vsKey)
+                const isSamen = vs.type === 'samen'
+                const bg = bgMap[vs.type] ?? 'bg-white border-stone-200'
+                const label = labelMap[vs.type] ?? 'text-stone-500'
+                if (isSamen && !samenUnlocked) {
+                  return (
+                    <div key={vs.id} className="mb-5 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-4">
+                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 mb-3">🔒 {vs.title}</h3>
+                      <p className="text-xs text-indigo-500 mb-4">Beide partners moeten eerst de persoonlijke vragen afronden.</p>
+                      <div className="space-y-2 mb-4">
+                        <div className={`flex items-center gap-2 text-sm ${myPersonalDone ? 'text-green-600' : 'text-stone-400'}`}>
+                          <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${myPersonalDone ? 'bg-green-100 text-green-600' : 'bg-stone-100 text-stone-400'}`}>{myPersonalDone ? '✓' : '○'}</span>
+                          Jij{myPersonalDone ? ' — klaar' : ''}
+                        </div>
+                        <div className={`flex items-center gap-2 text-sm ${partnerPersonalDone ? 'text-green-600' : 'text-stone-400'}`}>
+                          <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${partnerPersonalDone ? 'bg-green-100 text-green-600' : 'bg-stone-100 text-stone-400'}`}>{partnerPersonalDone ? '✓' : '○'}</span>
+                          {answers['personal:done']?.partner?.memberName?.split(' ')[0] ?? 'Partner'}{partnerPersonalDone ? ' — klaar' : ''}
+                        </div>
+                      </div>
+                      {!myPersonalDone && (
+                        <button onClick={markPersonalDone} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-semibold text-sm active:scale-[0.98] transition-transform">
+                          ✓ Ik ben klaar met persoonlijke vragen
+                        </button>
+                      )}
+                      {myPersonalDone && !partnerPersonalDone && (
+                        <p className="text-center text-xs text-indigo-400 mt-2">Wachten op je partner...</p>
+                      )}
+                    </div>
+                  )
+                }
+                return (
+                  <div key={vs.id} className="mb-5">
+                    <button
+                      onClick={() => toggleSection(vsKey)}
+                      className={`w-full flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition-colors hover:brightness-[0.98] active:scale-[0.98] ${bg}`}
+                    >
+                      <h3 className={`text-[10px] font-bold uppercase tracking-widest ${label}`}>{vs.title}</h3>
+                      <span className={`text-sm transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} ${label} opacity-60`}>▾</span>
+                    </button>
+                    {isOpen && (
+                      <div className={`mt-1 rounded-2xl border p-4 ${bg}`}>
+                        {vs.questions.map(q => renderExtraQ(q, `${vs.id}.${q.id}`, vs.type))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
           } catch { return null }
         })()}
 

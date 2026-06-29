@@ -146,6 +146,12 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
   const eqDragSrc = useRef<{sid: string; idx: number} | null>(null)
   const vsDragSrc = useRef<{sid: string; idx: number} | null>(null)
 
+  const [bulkPaste, setBulkPaste] = useState<{key: string; text: string} | null>(null)
+
+  function parseBulkLines(text: string): string[] {
+    return text.split('\n').map(l => l.replace(/^[\s•‣◦\-\*]+/, '').trim()).filter(l => l.length > 0)
+  }
+
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -463,8 +469,29 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                           className="w-7 h-7 rounded-full bg-red-50 text-red-400 text-sm flex items-center justify-center shrink-0">×</button>
                       </div>
                     ))}
-                    <button type="button" onClick={() => updateExtraQuestion(s.id, idx, { options: [...(eq.options ?? []), ''] })}
-                      className="text-[10px] text-stone-400 border border-dashed border-stone-200 rounded-lg px-2 py-1 hover:text-stone-600">+ Optie toevoegen</button>
+                    <div className="flex gap-1 flex-wrap">
+                      <button type="button" onClick={() => updateExtraQuestion(s.id, idx, { options: [...(eq.options ?? []), ''] })}
+                        className="text-[10px] text-stone-400 border border-dashed border-stone-200 rounded-lg px-2 py-1 hover:text-stone-600">+ Optie toevoegen</button>
+                      <button type="button" onClick={() => setBulkPaste(p => p?.key === `eq:${s.id}:${idx}` ? null : { key: `eq:${s.id}:${idx}`, text: '' })}
+                        className="text-[10px] text-stone-400 border border-dashed border-stone-200 rounded-lg px-2 py-1 hover:text-stone-600">Plak lijst</button>
+                    </div>
+                    {bulkPaste?.key === `eq:${s.id}:${idx}` && (
+                      <div className="space-y-1 pt-1">
+                        <textarea autoFocus value={bulkPaste.text}
+                          onChange={e => setBulkPaste({ key: bulkPaste.key, text: e.target.value })}
+                          placeholder={"Mijn trouw\nMijn humor\nMijn geloof\n..."}
+                          rows={5}
+                          className="w-full px-3 py-2 border border-amber-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300 font-mono resize-none" />
+                        <div className="flex gap-1">
+                          <button type="button"
+                            onClick={() => { const lines = parseBulkLines(bulkPaste.text); if (lines.length) updateExtraQuestion(s.id, idx, { options: [...(eq.options ?? []), ...lines] }); setBulkPaste(null) }}
+                            className="flex-1 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-semibold">
+                            Voeg {parseBulkLines(bulkPaste.text).length || 0} opties toe
+                          </button>
+                          <button type="button" onClick={() => setBulkPaste(null)} className="px-3 py-1.5 bg-stone-100 text-stone-500 rounded-lg text-xs">Annuleer</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {eq.type === 'slider' && (
@@ -581,8 +608,29 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                             className="w-7 h-7 rounded-full bg-red-50 text-red-400 text-sm flex items-center justify-center shrink-0">×</button>
                         </div>
                       ))}
-                      <button type="button" onClick={() => updateVirtualQuestion(vs.id, qi, { options: [...(q.options ?? []), ''] })}
-                        className="text-[10px] text-stone-400 border border-dashed border-stone-200 rounded-lg px-2 py-1 hover:text-stone-600">+ Optie toevoegen</button>
+                      <div className="flex gap-1 flex-wrap">
+                        <button type="button" onClick={() => updateVirtualQuestion(vs.id, qi, { options: [...(q.options ?? []), ''] })}
+                          className="text-[10px] text-stone-400 border border-dashed border-stone-200 rounded-lg px-2 py-1 hover:text-stone-600">+ Optie toevoegen</button>
+                        <button type="button" onClick={() => setBulkPaste(p => p?.key === `vs:${vs.id}:${qi}` ? null : { key: `vs:${vs.id}:${qi}`, text: '' })}
+                          className="text-[10px] text-stone-400 border border-dashed border-stone-200 rounded-lg px-2 py-1 hover:text-stone-600">Plak lijst</button>
+                      </div>
+                      {bulkPaste?.key === `vs:${vs.id}:${qi}` && (
+                        <div className="space-y-1 pt-1">
+                          <textarea autoFocus value={bulkPaste.text}
+                            onChange={e => setBulkPaste({ key: bulkPaste.key, text: e.target.value })}
+                            placeholder={"Mijn trouw\nMijn humor\nMijn geloof\n..."}
+                            rows={5}
+                            className="w-full px-3 py-2 border border-amber-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300 font-mono resize-none" />
+                          <div className="flex gap-1">
+                            <button type="button"
+                              onClick={() => { const lines = parseBulkLines(bulkPaste.text); if (lines.length) updateVirtualQuestion(vs.id, qi, { options: [...(q.options ?? []), ...lines] }); setBulkPaste(null) }}
+                              className="flex-1 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-semibold">
+                              Voeg {parseBulkLines(bulkPaste.text).length || 0} opties toe
+                            </button>
+                            <button type="button" onClick={() => setBulkPaste(null)} className="px-3 py-1.5 bg-stone-100 text-stone-500 rounded-lg text-xs">Annuleer</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {q.type === 'slider' && (
