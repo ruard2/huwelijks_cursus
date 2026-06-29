@@ -16,9 +16,17 @@ interface Props {
   onClose: () => void
 }
 
+interface Bron { title: string; author: string; year: string }
+
+function parseBronnen(raw: string): Bron[] {
+  try { return JSON.parse(raw) } catch { return [] }
+}
+
 export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColor, overrides, isDynamic, onSaved, onClose }: Props) {
   const ck = useCallback((suffix: string) => `ch:${chapter.id}:${suffix}`, [chapter.id])
   const t = (key: string, fallback: string) => overrides[ck(key)] ?? fallback
+
+  const [bronnen, setBronnen] = useState<Bron[]>(() => parseBronnen(overrides[ck('bronnen')] ?? '[]'))
 
   const [draft, setDraft] = useState<Record<string, string>>(() => {
     const d: Record<string, string> = {}
@@ -30,6 +38,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
         d['verse.pretext'] = t('verse.pretext', chapter.verse?.pretext ?? '')
       }
     }
+    d['verdieping.title'] = overrides[ck('verdieping.title')] ?? ''
     d['verdieping'] = overrides[ck('verdieping')] ?? ''
     if (chapter.intro !== undefined || isDynamic) {
       const stored = overrides[ck('intro')]
@@ -65,7 +74,8 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
   async function saveAll() {
     setSaving(true)
     const session = getSession()
-    const entries = Object.entries(draft)
+    const bronnenValue = JSON.stringify(bronnen.filter(b => b.title.trim()))
+    const entries: [string, string][] = [...Object.entries(draft), ['bronnen', bronnenValue]]
     await Promise.all(entries.map(([key, value]) =>
       fetch('/api/content', {
         method: 'POST',
@@ -158,14 +168,69 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
         )}
 
         {/* Verdieping */}
-        <div>
+        <div className="space-y-2">
           <label className={labelCls}>Verdieping <span className="font-normal normal-case tracking-normal text-stone-300">(optioneel — verschijnt als uitklapknop voor lezers)</span></label>
+          <input
+            type="text"
+            value={draft['verdieping.title'] ?? ''}
+            onChange={e => set('verdieping.title', e.target.value)}
+            placeholder="Titel van de verdieping (optioneel)"
+            className={inputCls}
+          />
           <RichEditor
             value={draft['verdieping'] ?? ''}
             onChange={v => set('verdieping', v)}
             placeholder="Verdiepende tekst, achtergrondinfo, extra Bijbelverwijzingen..."
             minHeight="120px"
           />
+        </div>
+
+        {/* Bronnen */}
+        <div>
+          <label className={labelCls}>Bronnen <span className="font-normal normal-case tracking-normal text-stone-300">(optioneel)</span></label>
+          <div className="space-y-3">
+            {bronnen.map((b, i) => (
+              <div key={i} className="bg-white border border-stone-200 rounded-xl p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 grid grid-cols-[1fr_auto_auto] gap-2">
+                    <input
+                      type="text"
+                      value={b.title}
+                      onChange={e => setBronnen(prev => prev.map((x, j) => j === i ? { ...x, title: e.target.value } : x))}
+                      placeholder="Titel"
+                      className={inputCls}
+                    />
+                    <input
+                      type="text"
+                      value={b.author}
+                      onChange={e => setBronnen(prev => prev.map((x, j) => j === i ? { ...x, author: e.target.value } : x))}
+                      placeholder="Auteur"
+                      className={`${inputCls} w-32`}
+                    />
+                    <input
+                      type="text"
+                      value={b.year}
+                      onChange={e => setBronnen(prev => prev.map((x, j) => j === i ? { ...x, year: e.target.value } : x))}
+                      placeholder="Jaar"
+                      className={`${inputCls} w-20`}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBronnen(prev => prev.filter((_, j) => j !== i))}
+                    className="shrink-0 w-7 h-7 rounded-full bg-red-50 text-red-400 text-sm flex items-center justify-center"
+                  >×</button>
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setBronnen(prev => [...prev, { title: '', author: '', year: '' }])}
+              className="w-full py-2 border-2 border-dashed border-stone-200 rounded-xl text-stone-400 text-xs font-medium hover:border-stone-300 transition-colors"
+            >
+              + Bron toevoegen
+            </button>
+          </div>
         </div>
 
         {/* Sections (static chapters only) */}

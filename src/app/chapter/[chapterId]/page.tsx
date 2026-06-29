@@ -396,6 +396,9 @@ export default function ChapterPage() {
             </button>
             {showVerdieping && (
               <div className="mt-2 bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-4">
+                {overrides[ck('verdieping.title')] && (
+                  <p className="text-base font-bold text-indigo-900 mb-3">{overrides[ck('verdieping.title')]}</p>
+                )}
                 {renderContent(overrides[ck('verdieping')], 'text-sm text-indigo-900 leading-relaxed')}
               </div>
             )}
@@ -432,7 +435,28 @@ export default function ChapterPage() {
           .filter(s => editor || !session.isSingle || s.type !== 'samen')
           .map(s => renderSection(s))}
 
-        <div className="mt-6 pt-4 border-t border-stone-100">
+        {/* Bronnen */}
+        {(() => {
+          try {
+            const bronnen: { title: string; author: string; year: string }[] = JSON.parse(overrides[ck('bronnen')] ?? '[]')
+            if (!bronnen.length) return null
+            return (
+              <div className="mt-6 bg-stone-50 rounded-2xl border border-stone-100 px-4 py-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-3">Bronnen</p>
+                <ul className="space-y-1.5">
+                  {bronnen.map((b, i) => (
+                    <li key={i} className="text-xs text-stone-500 leading-snug">
+                      {b.author && <span>{b.author}{b.year ? ` (${b.year})` : ''}. </span>}
+                      <span className="italic">{b.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          } catch { return null }
+        })()}
+
+        <div className="mt-4 pt-4 border-t border-stone-100">
           <CommentPopup chapterId={chapterId} chapterTitle={txt('title', String(chapter.title))} />
         </div>
       </div>
