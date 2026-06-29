@@ -74,6 +74,9 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
       const raw = overrides[ck(`s:${s.id}:extra-questions`)]
       if (raw) { try { map[s.id] = JSON.parse(raw) } catch { /* ignore */ } }
     })
+    // Virtual samen section (for chapters with no static samen section)
+    const virtualSamen = overrides[ck('s:_samen:extra-questions')]
+    if (virtualSamen) { try { map['_samen'] = JSON.parse(virtualSamen) } catch { /* ignore */ } }
     return map
   })
 
@@ -125,10 +128,13 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
     setSaving(true)
     const session = getSession()
     const bronnenValue = JSON.stringify(bronnen.filter(b => b.title.trim()))
-    const extraEntries: [string, string][] = chapter.sections.map(s => [
-      `s:${s.id}:extra-questions`,
-      JSON.stringify((extraQuestions[s.id] ?? []).filter(q => q.text.trim())),
-    ])
+    const extraEntries: [string, string][] = [
+      ...chapter.sections.map(s => [
+        `s:${s.id}:extra-questions`,
+        JSON.stringify((extraQuestions[s.id] ?? []).filter(q => q.text.trim())),
+      ] as [string, string]),
+      ['s:_samen:extra-questions', JSON.stringify((extraQuestions['_samen'] ?? []).filter(q => q.text.trim()))],
+    ]
     const entries: [string, string][] = [...Object.entries(draft), ['bronnen', bronnenValue], ...extraEntries]
     await Promise.all(entries.map(([key, value]) =>
       fetch('/api/content', {
@@ -375,6 +381,41 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
             </button>
           </div>
         ))}
+
+        {/* Virtual samen section — shown when chapter has no static samen section */}
+        {!chapter.sections.some(s => s.type === 'samen') && (
+          <div className="bg-indigo-50 rounded-2xl border border-indigo-200 p-4 space-y-4">
+            <div>
+              <p className={`${labelCls} text-indigo-600`}>Samen bespreken — vragen</p>
+              <p className="text-xs text-indigo-400 mt-0.5">Vragen voor koppels om samen te bespreken</p>
+            </div>
+            {(extraQuestions['_samen'] ?? []).map((eq, idx) => (
+              <div key={eq.id} className="pl-3 border-l-2 border-indigo-300 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className={labelCls}>Samen vraag {idx + 1}</p>
+                  <button type="button" onClick={() => removeExtraQuestion('_samen', idx)}
+                    className="text-[10px] text-red-400 hover:text-red-500">verwijderen</button>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-stone-400 mb-0.5">Vraagtekst</label>
+                  <input type="text" value={eq.text}
+                    onChange={e => updateExtraQuestion('_samen', idx, 'text', e.target.value)}
+                    placeholder="Vraag..." className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-stone-400 mb-0.5">Toelichting (grijs, optioneel)</label>
+                  <input type="text" value={eq.hint}
+                    onChange={e => updateExtraQuestion('_samen', idx, 'hint', e.target.value)}
+                    placeholder="Denk aan..." className={inputCls} />
+                </div>
+              </div>
+            ))}
+            <button type="button" onClick={() => addExtraQuestion('_samen')}
+              className="w-full py-2 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-500 text-xs font-medium hover:border-indigo-300 transition-colors">
+              + Samen-vraag toevoegen
+            </button>
+          </div>
+        )}
 
         {/* Subsections */}
         {chapter.subsections?.map(sub => (

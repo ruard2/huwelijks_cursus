@@ -470,6 +470,17 @@ export default function ChapterPage() {
           .filter(s => editor || !session.isSingle || s.type !== 'samen')
           .map(s => renderSection(s))}
 
+        {/* Virtual samen section for chapters with no static samen section */}
+        {(editor || !session.isSingle) && (() => {
+          const virtualKey = ck('s:_samen:extra-questions')
+          const virtualQs: { id: string; text: string; hint: string }[] = (() => {
+            try { return JSON.parse(overrides[virtualKey] ?? '[]') } catch { return [] }
+          })()
+          if (!virtualQs.length) return null
+          const virtualSection = { id: '_samen', type: 'samen' as const, title: 'Samen bespreken', questions: [] } as Section
+          return renderSection(virtualSection)
+        })()}
+
         {/* Bronnen */}
         {(() => {
           try {
