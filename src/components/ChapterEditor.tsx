@@ -66,6 +66,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
   })
 
   interface ExtraQ { id: string; text: string; hint: string }
+  interface VirtualSection { id: string; type: 'personal' | 'samen' | 'reflection' | 'personal_man' | 'personal_vrouw'; title: string; questions: ExtraQ[] }
 
   // Extra questions added by editors per section
   const [extraQuestions, setExtraQuestions] = useState<Record<string, ExtraQ[]>>(() => {
@@ -74,10 +75,12 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
       const raw = overrides[ck(`s:${s.id}:extra-questions`)]
       if (raw) { try { map[s.id] = JSON.parse(raw) } catch { /* ignore */ } }
     })
-    // Virtual samen section (for chapters with no static samen section)
-    const virtualSamen = overrides[ck('s:_samen:extra-questions')]
-    if (virtualSamen) { try { map['_samen'] = JSON.parse(virtualSamen) } catch { /* ignore */ } }
     return map
+  })
+
+  // Fully custom sections (title + type + questions) added by editors
+  const [virtualSections, setVirtualSections] = useState<VirtualSection[]>(() => {
+    try { return JSON.parse(overrides[ck('extra-sections')] ?? '[]') } catch { return [] }
   })
 
   function addExtraQuestion(sectionId: string) {
@@ -95,6 +98,28 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
       ...prev,
       [sectionId]: (prev[sectionId] ?? []).filter((_, i) => i !== idx),
     }))
+  }
+
+  function addVirtualSection() {
+    setVirtualSections(prev => [...prev, { id: `vs${Date.now()}`, type: 'samen', title: 'Samen bespreken', questions: [] }])
+  }
+  function removeVirtualSection(id: string) {
+    setVirtualSections(prev => prev.filter(s => s.id !== id))
+  }
+  function updateVirtualSection(id: string, field: 'type' | 'title', value: string) {
+    setVirtualSections(prev => prev.map(s => s.id === id ? { ...s, [field]: value as VirtualSection['type'] } : s))
+  }
+  function addVirtualQuestion(sectionId: string) {
+    setVirtualSections(prev => prev.map(s => s.id === sectionId
+      ? { ...s, questions: [...s.questions, { id: `vq${Date.now()}`, text: '', hint: '' }] } : s))
+  }
+  function updateVirtualQuestion(sectionId: string, idx: number, field: 'text' | 'hint', value: string) {
+    setVirtualSections(prev => prev.map(s => s.id === sectionId
+      ? { ...s, questions: s.questions.map((q, i) => i === idx ? { ...q, [field]: value } : q) } : s))
+  }
+  function removeVirtualQuestion(sectionId: string, idx: number) {
+    setVirtualSections(prev => prev.map(s => s.id === sectionId
+      ? { ...s, questions: s.questions.filter((_, i) => i !== idx) } : s))
   }
 
   // Track which question hint fields are expanded (for questions without a static hint)
@@ -133,7 +158,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
         `s:${s.id}:extra-questions`,
         JSON.stringify((extraQuestions[s.id] ?? []).filter(q => q.text.trim())),
       ] as [string, string]),
-      ['s:_samen:extra-questions', JSON.stringify((extraQuestions['_samen'] ?? []).filter(q => q.text.trim()))],
+      ['extra-sections', JSON.stringify(virtualSections.map(vs => ({ ...vs, questions: vs.questions.filter(q => q.text.trim()) })).filter(vs => vs.title.trim()))],
     ]
     const entries: [string, string][] = [...Object.entries(draft), ['bronnen', bronnenValue], ...extraEntries]
     await Promise.all(entries.map(([key, value]) =>
@@ -382,40 +407,70 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
           </div>
         ))}
 
-        {/* Virtual samen section — shown when chapter has no static samen section */}
-        {!chapter.sections.some(s => s.type === 'samen') && (
-          <div className="bg-indigo-50 rounded-2xl border border-indigo-200 p-4 space-y-4">
-            <div>
-              <p className={`${labelCls} text-indigo-600`}>Samen bespreken — vragen</p>
-              <p className="text-xs text-indigo-400 mt-0.5">Vragen voor koppels om samen te bespreken</p>
-            </div>
-            {(extraQuestions['_samen'] ?? []).map((eq, idx) => (
-              <div key={eq.id} className="pl-3 border-l-2 border-indigo-300 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className={labelCls}>Samen vraag {idx + 1}</p>
-                  <button type="button" onClick={() => removeExtraQuestion('_samen', idx)}
-                    className="text-[10px] text-red-400 hover:text-red-500">verwijderen</button>
+        {/* Virtual sections added by editors */}
+        {virtualSections.map((vs, vsIdx) => {
+          const borderColor = { personal: 'border-stone-200', samen: 'border-indigo-200', reflection: 'border-stone-200', personal_man: 'border-sky-200', personal_vrouw: 'border-rose-200' }[vs.type] ?? 'border-stone-200'
+          const bgColor = { personal: 'bg-white', samen: 'bg-indigo-50', reflection: 'bg-white', personal_man: 'bg-sky-50', personal_vrouw: 'bg-rose-50' }[vs.type] ?? 'bg-white'
+          return (
+            <div key={vs.id} className={`${bgColor} rounded-2xl border ${borderColor} p-4 space-y-4`}>
+              <div className="flex items-center justify-between">
+                <p className={labelCls}>Nieuwe sectie {vsIdx + 1}</p>
+                <button type="button" onClick={() => removeVirtualSection(vs.id)}
+                  className="text-[10px] text-red-400 hover:text-red-500">sectie verwijderen</button>
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className={labelCls}>Sectietitel</label>
+                  <input type="text" value={vs.title}
+                    onChange={e => updateVirtualSection(vs.id, 'title', e.target.value)}
+                    placeholder="Naam van de sectie..." className={inputCls} />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-stone-400 mb-0.5">Vraagtekst</label>
-                  <input type="text" value={eq.text}
-                    onChange={e => updateExtraQuestion('_samen', idx, 'text', e.target.value)}
-                    placeholder="Vraag..." className={inputCls} />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-stone-400 mb-0.5">Toelichting (grijs, optioneel)</label>
-                  <input type="text" value={eq.hint}
-                    onChange={e => updateExtraQuestion('_samen', idx, 'hint', e.target.value)}
-                    placeholder="Denk aan..." className={inputCls} />
+                  <label className={labelCls}>Type</label>
+                  <select value={vs.type}
+                    onChange={e => updateVirtualSection(vs.id, 'type', e.target.value)}
+                    className={inputCls}>
+                    <option value="samen">Samen</option>
+                    <option value="personal">Persoonlijk</option>
+                    <option value="reflection">Reflectie</option>
+                    <option value="personal_man">Man</option>
+                    <option value="personal_vrouw">Vrouw</option>
+                  </select>
                 </div>
               </div>
-            ))}
-            <button type="button" onClick={() => addExtraQuestion('_samen')}
-              className="w-full py-2 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-500 text-xs font-medium hover:border-indigo-300 transition-colors">
-              + Samen-vraag toevoegen
-            </button>
-          </div>
-        )}
+              {vs.questions.map((q, qi) => (
+                <div key={q.id} className="pl-3 border-l-2 border-stone-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className={labelCls}>Vraag {qi + 1}</p>
+                    <button type="button" onClick={() => removeVirtualQuestion(vs.id, qi)}
+                      className="text-[10px] text-red-400 hover:text-red-500">verwijderen</button>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-400 mb-0.5">Vraagtekst</label>
+                    <input type="text" value={q.text}
+                      onChange={e => updateVirtualQuestion(vs.id, qi, 'text', e.target.value)}
+                      placeholder="Vraag..." className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-400 mb-0.5">Toelichting (grijs, optioneel)</label>
+                    <input type="text" value={q.hint}
+                      onChange={e => updateVirtualQuestion(vs.id, qi, 'hint', e.target.value)}
+                      placeholder="Denk aan..." className={inputCls} />
+                  </div>
+                </div>
+              ))}
+              <button type="button" onClick={() => addVirtualQuestion(vs.id)}
+                className="w-full py-2 border-2 border-dashed border-stone-200 rounded-xl text-stone-400 text-xs font-medium hover:border-stone-300 transition-colors">
+                + Vraag toevoegen
+              </button>
+            </div>
+          )
+        })}
+
+        <button type="button" onClick={addVirtualSection}
+          className="w-full py-3 border-2 border-dashed border-stone-300 rounded-2xl text-stone-500 text-sm font-semibold hover:border-stone-400 transition-colors">
+          + Sectie toevoegen
+        </button>
 
         {/* Subsections */}
         {chapter.subsections?.map(sub => (

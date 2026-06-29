@@ -470,15 +470,50 @@ export default function ChapterPage() {
           .filter(s => editor || !session.isSingle || s.type !== 'samen')
           .map(s => renderSection(s))}
 
-        {/* Virtual samen section for chapters with no static samen section */}
-        {(editor || !session.isSingle) && (() => {
-          const virtualKey = ck('s:_samen:extra-questions')
-          const virtualQs: { id: string; text: string; hint: string }[] = (() => {
-            try { return JSON.parse(overrides[virtualKey] ?? '[]') } catch { return [] }
-          })()
-          if (!virtualQs.length) return null
-          const virtualSection = { id: '_samen', type: 'samen' as const, title: 'Samen bespreken', questions: [] } as Section
-          return renderSection(virtualSection)
+        {/* Virtual sections added by editors */}
+        {(() => {
+          try {
+            const bgMap: Record<string, string> = { personal: 'bg-stone-50 border-stone-200', samen: 'bg-indigo-50 border-indigo-200', reflection: 'bg-stone-50 border-stone-200', personal_man: 'bg-sky-50 border-sky-200', personal_vrouw: 'bg-rose-50 border-rose-200' }
+            const labelMap: Record<string, string> = { personal: 'text-stone-500', samen: 'text-indigo-600', reflection: 'text-stone-500', personal_man: 'text-sky-600', personal_vrouw: 'text-rose-600' }
+            const vSections: { id: string; type: string; title: string; questions: { id: string; text: string; hint: string }[] }[] = JSON.parse(overrides[ck('extra-sections')] ?? '[]')
+            return vSections
+              .filter(vs => vs.questions.length > 0)
+              .filter(vs => editor || !session.isSingle || vs.type !== 'samen')
+              .map(vs => (
+                <div key={vs.id} className={`mb-5 rounded-2xl border p-4 ${bgMap[vs.type] ?? 'bg-white border-stone-200'}`}>
+                  <h3 className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${labelMap[vs.type] ?? 'text-stone-500'}`}>{vs.title}</h3>
+                  {vs.questions.map(q => {
+                    const qKey = `${vs.id}.${q.id}`
+                    const myAnswer = answers[qKey]?.mine
+                    const partnerAnswer = answers[qKey]?.partner
+                    const isPrivate = myAnswer?.isPrivate ?? false
+                    return (
+                      <div key={q.id} className="mb-5">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <p className="text-sm font-medium text-stone-700">{q.text}</p>
+                          <button onClick={() => {
+                            const newPrivate = !isPrivate
+                            const value = myAnswer?.value ?? ''
+                            setAnswers(prev => ({ ...prev, [qKey]: { ...prev[qKey], mine: { ...(prev[qKey]?.mine ?? {}), questionId: qKey, value, isPrivate: newPrivate } as AnswerRecord } }))
+                            saveAnswer(qKey, value, newPrivate)
+                          }} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
+                        </div>
+                        {q.hint && <p className="text-xs text-stone-400 mb-2">{q.hint}</p>}
+                        <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
+                          placeholder="Jouw antwoord..."
+                          className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
+                        {partnerAnswer?.value && (
+                          <div className="mt-2 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
+                            <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerAnswer.memberName}</p>
+                            <p className="text-sm text-stone-700 whitespace-pre-wrap">{partnerAnswer.value}</p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))
+          } catch { return null }
         })()}
 
         {/* Bronnen */}
