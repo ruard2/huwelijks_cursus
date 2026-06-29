@@ -137,7 +137,20 @@ export default function DeelPage() {
     idx: deel.chapters.length + i,
     isDynamic: true,
   }))
-  const allChapters = [...staticChapters, ...dynChapters]
+  const savedChapterOrder: string[] = (() => {
+    try { return JSON.parse(overrides[`deel:${deelId}:chapter-order`] ?? '[]') } catch { return [] }
+  })()
+  const unsortedChapters = [...staticChapters, ...dynChapters]
+  const allChapters = savedChapterOrder.length > 0
+    ? [...unsortedChapters].sort((a, b) => {
+        const ai = savedChapterOrder.indexOf(a.id)
+        const bi = savedChapterOrder.indexOf(b.id)
+        if (ai === -1 && bi === -1) return 0
+        if (ai === -1) return 1
+        if (bi === -1) return -1
+        return ai - bi
+      })
+    : unsortedChapters
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -262,6 +275,7 @@ export default function DeelPage() {
         <DeelEditor
           deel={deel}
           overrides={overrides}
+          chapters={allChapters.map(ch => ({ id: ch.id, title: ch.title }))}
           onSaved={updates => setOverrides(prev => ({ ...prev, ...updates }))}
           onClose={() => setShowEditor(false)}
         />

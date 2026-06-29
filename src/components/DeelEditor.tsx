@@ -1,18 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { getSession } from '@/lib/session'
 import type { Deel } from '@/content'
 import RichEditor from './RichEditor'
 
+interface ChapterItem { id: string; title: string }
+
 interface Props {
   deel: Deel
   overrides: Record<string, string>
+  chapters?: ChapterItem[]
   onSaved: (updates: Record<string, string>) => void
   onClose: () => void
 }
 
-export default function DeelEditor({ deel, overrides, onSaved, onClose }: Props) {
+export default function DeelEditor({ deel, overrides, chapters, onSaved, onClose }: Props) {
   const ck = (suffix: string) => `deel:${deel.id}:${suffix}`
   const t = (key: string, fallback: string) => overrides[ck(key)] ?? fallback
 
@@ -21,12 +24,31 @@ export default function DeelEditor({ deel, overrides, onSaved, onClose }: Props)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  const [localOrder, setLocalOrder] = useState<ChapterItem[]>(() => {
+    if (!chapters || chapters.length === 0) return []
+    try {
+      const savedOrder: string[] = JSON.parse(overrides[ck('chapter-order')] ?? '[]')
+      if (savedOrder.length === 0) return chapters
+      return [...chapters].sort((a, b) => {
+        const ai = savedOrder.indexOf(a.id)
+        const bi = savedOrder.indexOf(b.id)
+        if (ai === -1 && bi === -1) return 0
+        if (ai === -1) return 1
+        if (bi === -1) return -1
+        return ai - bi
+      })
+    } catch { return chapters }
+  })
+
+  const dragIdx = useRef<number | null>(null)
+
   async function saveAll() {
     setSaving(true)
     const session = getSession()
     const entries: [string, string][] = [
       [ck('title'), title],
       [ck('intro'), intro],
+      [ck('chapter-order'), JSON.stringify(localOrder.map(c => c.id))],
     ]
     await Promise.all(entries.map(([key, value]) =>
       fetch('/api/content', {
@@ -87,6 +109,37 @@ export default function DeelEditor({ deel, overrides, onSaved, onClose }: Props)
               minHeight="140px"
             />
           </div>
+
+          {localOrder.length > 0 && (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-2">Volgorde hoofdstukken</label>
+              <div className="space-y-1">
+                {localOrder.map((ch, idx) => (
+                  <div
+                    key={ch.id}
+                    draggable
+                    onDragStart={() => { dragIdx.current = idx }}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={() => {
+                      if (dragIdx.current === null || dragIdx.current === idx) return
+                      const items = [...localOrder]
+                      const [item] = items.splice(dragIdx.current, 1)
+                      items.splice(idx, 0, item)
+                      setLocalOrder(items)
+                      dragIdx.current = null
+                    }}
+                    onDragEnd={() => { dragIdx.current = null }}
+                    className="flex items-center gap-3 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 cursor-grab active:cursor-grabbing active:bg-amber-50 active:border-amber-200 transition-colors"
+                  >
+                    <span className="text-stone-300 select-none text-base leading-none">⠿</span>
+                    <span className="w-5 h-5 rounded-full bg-stone-200 text-stone-500 text-[10px] font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
+                    <span className="text-sm text-stone-700 truncate">{ch.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="h-4" />
         </div>
       </div>
