@@ -393,6 +393,70 @@ export default function ChapterPage() {
     )
   }
 
+  function renderAnswerComparison() {
+    const manSection = chapter.sections.find(s => s.type === 'personal_man')
+    const vrouwSection = chapter.sections.find(s => s.type === 'personal_vrouw')
+    if (!manSection && !vrouwSection) return null
+
+    const hiddenQs: string[] = (() => { try { return JSON.parse(overrides[ck('hidden-questions')] ?? '[]') } catch { return [] } })()
+
+    function renderCompSection(sec: Section, bg: string, label: string) {
+      const visibleQs = sec.questions.filter(q => !hiddenQs.includes(`s:${sec.id}.q:${q.id}`))
+      const hasAny = visibleQs.some(q => {
+        const key = `${sec.id}.${q.id}`
+        return answers[key]?.mine?.value || answers[key]?.partner?.value
+      })
+      if (!hasAny) return null
+      return (
+        <div className={`rounded-2xl border p-3 ${bg}`}>
+          <p className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${label}`}>
+            {txt(`s:${sec.id}.title`, sec.title)}
+          </p>
+          <div className="space-y-3">
+            {visibleQs.map(q => {
+              const key = `${sec.id}.${q.id}`
+              const myA = answers[key]?.mine
+              const partnerA = answers[key]?.partner
+              if (!myA?.value && !partnerA?.value) return null
+              return (
+                <div key={q.id} className="border-t border-white/60 pt-2 first:border-t-0 first:pt-0">
+                  <p className="text-xs text-stone-500 mb-2 italic">{txt(`s:${sec.id}.q:${q.id}.text`, q.text)}</p>
+                  {myA?.value && (
+                    <div className="mb-1.5">
+                      <p className="text-[10px] font-semibold text-stone-400 mb-0.5">{myA.memberName.split(' ')[0]}</p>
+                      <p className="text-sm text-stone-800 whitespace-pre-wrap leading-snug">{myA.value}</p>
+                    </div>
+                  )}
+                  {partnerA?.value && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-stone-400 mb-0.5">{partnerA.memberName.split(' ')[0]}</p>
+                      <p className="text-sm text-stone-800 whitespace-pre-wrap leading-snug">{partnerA.value}</p>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )
+    }
+
+    const manCard = manSection ? renderCompSection(manSection, 'bg-sky-50 border-sky-100', 'text-sky-600') : null
+    const vrouwCard = vrouwSection ? renderCompSection(vrouwSection, 'bg-rose-50 border-rose-100', 'text-rose-600') : null
+    if (!manCard && !vrouwCard) return null
+
+    return (
+      <div className="mb-5">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-2">Jullie persoonlijke antwoorden</p>
+        <div className="space-y-3">
+          {manCard}
+          {vrouwCard}
+        </div>
+        <div className="h-px bg-indigo-200 mt-5 mb-1" />
+      </div>
+    )
+  }
+
   function renderSection(section: Section, subsection: Subsection | null = null) {
     const bgMap: Record<string, string> = {
       personal: 'bg-stone-50 border-stone-200',
@@ -464,6 +528,7 @@ export default function ChapterPage() {
         {isOpen && (
           <div className={`mt-1 rounded-2xl border p-4 ${bg}`}>
             {sectionIntro && renderContent(sectionIntro, 'text-xs text-stone-500 mb-3 italic leading-relaxed')}
+            {isSamen && renderAnswerComparison()}
             {visibleQuestions.map(q => renderQuestion(q, section, subsection))}
             {extraQuestions.map(eq => {
               const qKey = subsection ? `${subsection.id}.${eq.id}` : `${section.id}.${eq.id}`
