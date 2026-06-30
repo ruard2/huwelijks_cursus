@@ -98,6 +98,13 @@ export default function DeelPage() {
       headers: { 'Content-Type': 'application/json', 'x-member-name': session.memberName },
       body: JSON.stringify({ id }),
     })
+    const newHidden = [...hiddenChapters, id]
+    setHiddenChapters(newHidden)
+    await fetch('/api/content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-member-name': session.memberName },
+      body: JSON.stringify({ key: 'app:hidden-chapters', value: JSON.stringify(newHidden) }),
+    })
     setDynamicChapters(prev => prev.filter(c => c.id !== id))
     setDeleteConfirm(null)
   }
