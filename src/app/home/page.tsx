@@ -33,6 +33,7 @@ export default function HomePage() {
   const [showProfile, setShowProfile] = useState(false)
   const [deelOverrides, setDeelOverrides] = useState<Record<string, string>>({})
   const [hiddenChapters, setHiddenChapters] = useState<string[]>([])
+  const [dynamicChapters, setDynamicChapters] = useState<{ id: string; deelId: string }[]>([])
 
   useEffect(() => {
     const s = getSession()
@@ -47,6 +48,10 @@ export default function HomePage() {
     fetch('/api/content?keys=app:hidden-chapters')
       .then(r => r.json())
       .then(data => { try { setHiddenChapters(JSON.parse(data.overrides?.['app:hidden-chapters'] ?? '[]')) } catch { /* ignore */ } })
+      .catch(() => {})
+    fetch('/api/chapters?all=true')
+      .then(r => r.json())
+      .then(data => setDynamicChapters(data.chapters ?? []))
       .catch(() => {})
 
     const seen = localStorage.getItem('hc_order_notice')
@@ -81,10 +86,13 @@ export default function HomePage() {
     }
   }
 
-  function visibleChapters(deelId: string) {
+  function visibleChapters(deelId: string): { id: string }[] {
     const deel = DELEN.find(d => d.id === deelId)
-    if (!deel) return []
-    return deel.chapters.filter(c => !hiddenChapters.includes(c.id))
+    const dynIds = new Set(dynamicChapters.map(c => c.id))
+    const staticChs = (deel?.chapters ?? [])
+      .filter(c => !hiddenChapters.includes(c.id) && !dynIds.has(c.id))
+    const dynChs = dynamicChapters.filter(c => c.deelId === deelId && !hiddenChapters.includes(c.id))
+    return [...staticChs, ...dynChs]
   }
 
   function getDeelDone(deelId: string): number {

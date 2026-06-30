@@ -9,6 +9,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ chapter })
   }
   const deelId = req.nextUrl.searchParams.get('deelId')
+  const all = req.nextUrl.searchParams.get('all')
+  if (all === 'true') {
+    const chapters = await prisma.dynamicChapter.findMany({ orderBy: { order: 'asc' } })
+    return NextResponse.json({ chapters })
+  }
   if (!deelId) return NextResponse.json({ chapters: [] })
   const chapters = await prisma.dynamicChapter.findMany({
     where: { deelId },
