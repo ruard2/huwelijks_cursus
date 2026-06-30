@@ -343,12 +343,12 @@ export default function ChapterPage() {
             className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
         )}
         {eq.type === 'meerkeuze' && (eq.options ?? []).length > 0 && (() => {
-          const andersActive = myAnswer?.value?.startsWith('Anders:') ?? false
+          const andersActive = myAnswer?.value?.startsWith('Anders: ') ?? false
           return (
             <>
               <div className="grid grid-cols-2 gap-2">
                 {(eq.options ?? []).map(opt => {
-                  const isAnders = /^Anders:?\s*$/.test(opt.trim())
+                  const isAnders = /^anders(,?\s*namelijk)?:?\s*$/i.test(opt.trim())
                   const isSelected = isAnders ? andersActive : myAnswer?.value === opt
                   return (
                     <button key={opt}
