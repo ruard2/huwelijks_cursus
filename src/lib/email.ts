@@ -1,29 +1,40 @@
-// Set RESEND_API_KEY and RESEND_FROM in Railway environment variables.
-// RESEND_FROM example: "Huwelijkscursus <noreply@jouwdomein.nl>"
-// The from-domain must be verified in your Resend dashboard.
+import nodemailer from 'nodemailer'
+
+// Transip SMTP — set these in Railway environment variables:
+//   SMTP_HOST  = smtp.transip.email
+//   SMTP_PORT  = 587
+//   SMTP_USER  = admin@huwelijkscursus.online
+//   SMTP_PASS  = <e-mailwachtwoord>
+//   SMTP_FROM  = Huwelijkscursus <admin@huwelijkscursus.online>
 
 export async function sendEmail({ to, subject, html }: {
   to: string
   subject: string
   html: string
 }): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) { console.error('RESEND_API_KEY not set'); return false }
+  const host = process.env.SMTP_HOST
+  const user = process.env.SMTP_USER
+  const pass = process.env.SMTP_PASS
+  if (!host || !user || !pass) {
+    console.error('SMTP_HOST / SMTP_USER / SMTP_PASS not set')
+    return false
+  }
 
-  const from = process.env.RESEND_FROM ?? 'Huwelijkscursus <noreply@huwelijkscursus.nl>'
+  const port = parseInt(process.env.SMTP_PORT ?? '587', 10)
+  const from = process.env.SMTP_FROM ?? `Huwelijkscursus <${user}>`
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from, to, subject, html }),
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
   })
 
-  if (!res.ok) {
-    const err = await res.text().catch(() => '')
-    console.error('Resend error:', res.status, err)
+  try {
+    await transporter.sendMail({ from, to, subject, html })
+    return true
+  } catch (err) {
+    console.error('SMTP error:', err)
+    return false
   }
-  return res.ok
 }

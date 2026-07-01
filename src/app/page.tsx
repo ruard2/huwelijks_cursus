@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { setSession, getSession } from '@/lib/session'
+import { setSession, getSession, setGuestMode } from '@/lib/session'
 import type { Session } from '@/lib/session'
 
 type Mode =
@@ -11,7 +11,8 @@ type Mode =
   | 'set-pin'
   | 'forgot-code' | 'forgot-code-sent'
   | 'forgot-pin' | 'pin-reset-sent' | 'reset-pin'
-  | 'register-begeleider' | 'begeleider-done'
+  | 'begeleider-choose' | 'register-begeleider' | 'begeleider-verify'
+  | 'begeleider-login' | 'begeleider-forgot-pin' | 'begeleider-reset-pin'
 
 function stripTitle(name: string) {
   return name.replace(/^(ds\.?|dr\.?|drs\.?|prof\.?|ir\.?|mr\.?)\s+/i, '').trim()
@@ -93,7 +94,8 @@ export default function LandingPage() {
     if (getSession()) router.replace('/home')
   }, [router])
 
-  function back() { setMode('choose'); setError(''); setPin(''); setNewPin(''); setConfirmPin('') }
+  function back() { setMode('choose'); setError(''); setPin(''); setNewPin(''); setConfirmPin(''); setResetToken('') }
+  function backToBegeleider() { setMode('begeleider-choose'); setError(''); setPin(''); setNewPin(''); setConfirmPin(''); setResetToken('') }
   const inputCls = 'w-full px-4 py-3 border border-stone-200 rounded-xl text-base bg-white focus:outline-none focus:ring-2 focus:ring-stone-400'
 
   async function checkIsBegeleider(memberName: string): Promise<boolean> {
@@ -280,21 +282,91 @@ export default function LandingPage() {
     finally { setLoading(false) }
   }
 
-  // ── REGISTER BEGELEIDER ───────────────────────────────────────────────
-  async function handleRegisterBegeleider() {
+  // ── BEGELEIDER REGISTER ───────────────────────────────────────────────
+  async function handleBegeleiderRegister() {
     if (!name.trim()) return setError('Vul je naam in')
+    if (!email.trim()) return setError('Vul je e-mailadres in')
     setLoading(true); setError('')
     try {
-      const res = await fetch('/api/begeleiders', {
+      const res = await fetch('/api/begeleiders/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim() }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Er ging iets mis'); return }
-      setRegisteredBegeleider(name.trim())
-      setShareMsg(`Hoi! Ik begeleid jullie bij de huwelijkscursus. Zoek bij het aanmelden naar: ${name.trim()}`)
-      setMode('begeleider-done')
+      if (!res.ok) { setError(data.error); return }
+      setResetToken(''); setNewPin(''); setConfirmPin('')
+      setMode('begeleider-verify')
     } catch { setError('Er ging iets mis. Probeer het opnieuw.') }
+    finally { setLoading(false) }
+  }
+
+  // ── BEGELEIDER VERIFY ─────────────────────────────────────────────────
+  async function handleBegeleiderVerify() {
+    if (!resetToken.trim()) return setError('Voer de 6-cijferige code in')
+    if (!newPin || newPin.length < 4) return setError('PIN moet minimaal 4 cijfers zijn')
+    if (newPin !== confirmPin) return setError('PINs komen niet overeen')
+    setLoading(true); setError('')
+    try {
+      const res = await fetch('/api/begeleiders/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), token: resetToken.trim(), newPin }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error); return }
+      setSession({ memberId: data.memberId, memberName: data.memberName, coupleId: data.coupleId, coupleCode: data.coupleCode, isSingle: false, isBegeleider: true })
+      router.push('/home')
+    } catch { setError('Er ging iets mis.') }
+    finally { setLoading(false) }
+  }
+
+  // ── BEGELEIDER LOGIN ──────────────────────────────────────────────────
+  async function handleBegeleiderLogin() {
+    if (!name.trim() || !pin.trim()) return setError('Vul naam en PIN in')
+    setLoading(true); setError('')
+    try {
+      const res = await fetch('/api/begeleiders/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), pin }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error); return }
+      setSession({ memberId: data.memberId, memberName: data.memberName, coupleId: data.coupleId, coupleCode: data.coupleCode, isSingle: false, isBegeleider: true })
+      router.push('/home')
+    } catch { setError('Er ging iets mis.') }
+    finally { setLoading(false) }
+  }
+
+  // ── BEGELEIDER FORGOT PIN ─────────────────────────────────────────────
+  async function handleBegeleiderForgotPin() {
+    if (!email.trim()) return setError('Vul je e-mailadres in')
+    setLoading(true); setError('')
+    try {
+      await fetch('/api/begeleiders/forgot-pin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      })
+      setResetToken(''); setNewPin(''); setConfirmPin('')
+      setMode('begeleider-reset-pin')
+    } catch { setError('Er ging iets mis.') }
+    finally { setLoading(false) }
+  }
+
+  // ── BEGELEIDER RESET PIN ──────────────────────────────────────────────
+  async function handleBegeleiderResetPin() {
+    if (!resetToken.trim()) return setError('Voer de 6-cijferige code in')
+    if (!newPin || newPin.length < 4) return setError('PIN moet minimaal 4 cijfers zijn')
+    if (newPin !== confirmPin) return setError('PINs komen niet overeen')
+    setLoading(true); setError('')
+    try {
+      const res = await fetch('/api/begeleiders/reset-pin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), token: resetToken.trim(), newPin }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error); return }
+      setSession({ memberId: data.memberId, memberName: data.memberName, coupleId: data.coupleId, coupleCode: data.coupleCode, isSingle: false, isBegeleider: true })
+      router.push('/home')
+    } catch { setError('Er ging iets mis.') }
     finally { setLoading(false) }
   }
 
@@ -314,7 +386,7 @@ export default function LandingPage() {
             <button onClick={() => setMode('solo')}
               className="w-full text-left bg-white border border-stone-200 rounded-2xl p-5 active:scale-95 transition-transform">
               <p className="font-bold text-stone-900 text-base">Persoonlijke verkenning</p>
-              <p className="text-stone-500 text-sm mt-1 leading-snug">Alleen doen, in eigen tempo.</p>
+              <p className="text-stone-500 text-sm mt-1 leading-snug">Alleen doen, in eigen tempo. Antwoorden opgeslagen.</p>
             </button>
             <button onClick={() => setMode('create')}
               className="w-full text-left bg-stone-900 text-white rounded-2xl p-5 active:scale-95 transition-transform">
@@ -326,10 +398,14 @@ export default function LandingPage() {
               <p className="font-bold text-stone-900 text-base">Deelnemen met koppelcode</p>
               <p className="text-stone-500 text-sm mt-1 leading-snug">Je partner heeft al een ruimte aangemaakt.</p>
             </button>
-            <button onClick={() => { setMode('register-begeleider'); setName(''); setError('') }}
+            <button onClick={() => { setMode('begeleider-choose'); setName(''); setEmail(''); setPin(''); setError('') }}
               className="w-full text-left bg-white border border-dashed border-stone-300 rounded-2xl p-4 active:scale-95 transition-transform">
-              <p className="font-semibold text-stone-600 text-sm">Begeleider registreren</p>
-              <p className="text-stone-400 text-xs mt-0.5">Zodat stellen jou kunnen koppelen als hun begeleider.</p>
+              <p className="font-semibold text-stone-600 text-sm">Ben je begeleider?</p>
+              <p className="text-stone-400 text-xs mt-0.5">Registreer of log in als begeleider.</p>
+            </button>
+            <button onClick={() => { setGuestMode(); router.push('/home') }}
+              className="w-full text-center text-xs text-stone-400 py-2 hover:text-stone-600 transition-colors">
+              Bekijk de cursus zonder account →
             </button>
           </div>
         )}
@@ -585,47 +661,165 @@ export default function LandingPage() {
           </div>
         )}
 
-        {/* ── REGISTER BEGELEIDER ── */}
-        {mode === 'register-begeleider' && (
-          <div className="space-y-4">
+        {/* ── BEGELEIDER CHOOSE ── */}
+        {mode === 'begeleider-choose' && (
+          <div className="space-y-3">
             <button onClick={back} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
-            <div className="bg-stone-100 rounded-2xl p-4">
-              <p className="text-sm text-stone-600 leading-relaxed">Registreer je als begeleider zodat stellen jou kunnen vinden en koppelen.</p>
+            <div className="bg-stone-50 rounded-2xl p-4 mb-2">
+              <p className="text-sm text-stone-600 leading-relaxed">Als begeleider kun je de cursus inhoud bekijken en stellen begeleiden. Je logt in met jouw naam en PIN.</p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Jouw naam (zoals stellen je kennen)</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleRegisterBegeleider()}
-                placeholder="Bijv. Jan Koeman" className={inputCls} autoFocus />
-              <p className="text-xs text-stone-400 mt-1">Tip: titelprefix (ds., dr.) wordt genegeerd bij zoeken.</p>
-            </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={handleRegisterBegeleider} disabled={loading}
-              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50 active:scale-95 transition-transform">
-              {loading ? 'Bezig...' : 'Registreren →'}
+            <button onClick={() => { setMode('register-begeleider'); setName(''); setEmail(''); setError('') }}
+              className="w-full text-left bg-stone-900 text-white rounded-2xl p-5 active:scale-95 transition-transform">
+              <p className="font-bold text-base">Nieuw account aanmaken</p>
+              <p className="text-stone-300 text-sm mt-1 leading-snug">Registreer met naam, e-mail en stel een PIN in.</p>
+            </button>
+            <button onClick={() => { setMode('begeleider-login'); setName(''); setPin(''); setError('') }}
+              className="w-full text-left bg-white border border-stone-200 rounded-2xl p-5 active:scale-95 transition-transform">
+              <p className="font-bold text-stone-900 text-base">Inloggen</p>
+              <p className="text-stone-500 text-sm mt-1 leading-snug">Je hebt al een begeleider-account.</p>
             </button>
           </div>
         )}
 
-        {mode === 'begeleider-done' && (
+        {/* ── REGISTER BEGELEIDER ── */}
+        {mode === 'register-begeleider' && (
           <div className="space-y-4">
-            <div className="text-center py-4">
-              <div className="text-4xl mb-3">✓</div>
-              <p className="font-bold text-stone-900 text-lg">{registeredBegeleider}</p>
-              <p className="text-stone-500 text-sm mt-1">Je bent geregistreerd als begeleider</p>
+            <button onClick={backToBegeleider} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Jouw naam (zoals stellen je kennen)</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)}
+                placeholder="Bijv. Jan Koeman" className={inputCls} autoFocus />
+              <p className="text-xs text-stone-400 mt-1">Tip: titelprefix (ds., dr.) wordt genegeerd bij zoeken.</p>
             </div>
-            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4">
-              <p className="text-xs font-semibold text-stone-500 uppercase tracking-widest mb-2">Deel met stellen</p>
-              <p className="text-sm text-stone-700 leading-relaxed">{shareMsg}</p>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">E-mailadres</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleBegeleiderRegister()}
+                placeholder="jouw@email.nl" className={inputCls} />
+              <p className="text-xs text-stone-400 mt-1">Voor verificatie en PIN-herstel.</p>
             </div>
-            <button onClick={() => {
-              if (navigator.share) navigator.share({ text: shareMsg }).catch(() => {})
-              else navigator.clipboard.writeText(shareMsg).then(() => alert('Gekopieerd!')).catch(() => {})
-            }} className="w-full py-3 bg-stone-900 text-white rounded-2xl font-semibold text-sm active:scale-95 transition-transform">
-              Deel ↗
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <button onClick={handleBegeleiderRegister} disabled={loading}
+              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50 active:scale-95 transition-transform">
+              {loading ? 'Bezig...' : 'Verificatiecode opsturen →'}
             </button>
-            <button onClick={back} className="w-full py-3 bg-stone-100 text-stone-600 rounded-2xl text-sm font-medium">
-              Terug naar start
+          </div>
+        )}
+
+        {/* ── BEGELEIDER VERIFY ── */}
+        {mode === 'begeleider-verify' && (
+          <div className="space-y-4">
+            <div className="text-center pt-2">
+              <p className="text-2xl mb-2">📬</p>
+              <p className="font-bold text-stone-900">Controleer je e-mail</p>
+              <p className="text-sm text-stone-500 mt-1">We hebben een 6-cijferige code gestuurd naar <strong>{email}</strong>.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Code uit e-mail</label>
+              <input type="text" inputMode="numeric" maxLength={6} value={resetToken}
+                onChange={e => setResetToken(e.target.value.replace(/\D/g, ''))}
+                placeholder="123456" className={`${inputCls} tracking-widest text-center`} autoFocus />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">PIN instellen <span className="text-stone-400 font-normal text-xs">(min. 4 cijfers)</span></label>
+              <PinInput value={newPin} onChange={setNewPin} />
+            </div>
+            {newPin.length >= 4 && (
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">Herhaal PIN</label>
+                <PinInput value={confirmPin} onChange={setConfirmPin} />
+              </div>
+            )}
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <button onClick={handleBegeleiderVerify} disabled={loading || !resetToken || !newPin}
+              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50 active:scale-95 transition-transform">
+              {loading ? 'Bezig...' : 'Bevestigen & inloggen →'}
+            </button>
+            <button onClick={() => { setMode('register-begeleider'); setError('') }}
+              className="w-full text-center text-xs text-stone-400 py-1">
+              Opnieuw versturen
+            </button>
+          </div>
+        )}
+
+        {/* ── BEGELEIDER LOGIN ── */}
+        {mode === 'begeleider-login' && (
+          <div className="space-y-4">
+            <button onClick={backToBegeleider} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Jouw naam</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)}
+                placeholder="Bijv. Jan Koeman" className={inputCls} autoFocus />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">PIN</label>
+              <PinInput value={pin} onChange={setPin} />
+            </div>
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <button onClick={handleBegeleiderLogin} disabled={loading || !name || !pin}
+              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50 active:scale-95 transition-transform">
+              {loading ? 'Bezig...' : 'Inloggen →'}
+            </button>
+            <button onClick={() => { setMode('begeleider-forgot-pin'); setEmail(''); setError('') }}
+              className="w-full text-center text-xs text-stone-400 py-1">
+              PIN vergeten?
+            </button>
+          </div>
+        )}
+
+        {/* ── BEGELEIDER FORGOT PIN ── */}
+        {mode === 'begeleider-forgot-pin' && (
+          <div className="space-y-4">
+            <button onClick={() => { setMode('begeleider-login'); setError('') }} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
+            <div>
+              <p className="font-bold text-stone-900 mb-1">PIN vergeten?</p>
+              <p className="text-sm text-stone-500 mb-4 leading-relaxed">Voer het e-mailadres in dat je bij registratie hebt opgegeven.</p>
+              <label className="block text-sm font-medium text-stone-700 mb-1">E-mailadres</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleBegeleiderForgotPin()}
+                placeholder="jouw@email.nl" className={inputCls} autoFocus />
+            </div>
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <button onClick={handleBegeleiderForgotPin} disabled={loading}
+              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50">
+              {loading ? 'Bezig...' : 'Resetcode opsturen →'}
+            </button>
+          </div>
+        )}
+
+        {/* ── BEGELEIDER RESET PIN ── */}
+        {mode === 'begeleider-reset-pin' && (
+          <div className="space-y-4">
+            <div>
+              <p className="font-bold text-stone-900 mb-1">Nieuwe PIN instellen</p>
+              <p className="text-sm text-stone-500 mb-4 leading-relaxed">
+                We hebben een code gestuurd naar <strong>{email}</strong> (als het adres bekend is).
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Code uit e-mail</label>
+              <input type="text" inputMode="numeric" maxLength={6} value={resetToken}
+                onChange={e => setResetToken(e.target.value.replace(/\D/g, ''))}
+                placeholder="123456" className={`${inputCls} tracking-widest text-center`} autoFocus />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Nieuwe PIN</label>
+              <PinInput value={newPin} onChange={setNewPin} />
+            </div>
+            {newPin.length >= 4 && (
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">Herhaal PIN</label>
+                <PinInput value={confirmPin} onChange={setConfirmPin} />
+              </div>
+            )}
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <button onClick={handleBegeleiderResetPin} disabled={loading || !resetToken || !newPin}
+              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50">
+              {loading ? 'Bezig...' : 'PIN instellen & inloggen →'}
+            </button>
+            <button onClick={() => { setMode('begeleider-forgot-pin'); setError('') }}
+              className="w-full text-center text-xs text-stone-400 py-1">
+              Nieuwe code aanvragen
             </button>
           </div>
         )}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSession, setSession } from '@/lib/session'
+import { getSession, setSession, isGuestMode, clearGuestMode } from '@/lib/session'
 import { DELEN, getChapter } from '@/content'
 import { isAdmin } from '@/lib/roles'
 import ProfileMenu from '@/components/ProfileMenu'
@@ -37,13 +37,18 @@ export default function HomePage() {
   const [deelOverrides, setDeelOverrides] = useState<Record<string, string>>({})
   const [hiddenChapters, setHiddenChapters] = useState<string[]>([])
   const [dynamicChapters, setDynamicChapters] = useState<{ id: string; deelId: string }[]>([])
+  const [isGuest, setIsGuest] = useState(false)
 
   useEffect(() => {
     const s = getSession()
-    if (!s) { router.replace('/'); return }
-    setSessionData(s)
-    fetchProgress(s.memberId)
-    if (isAdmin(s.memberName)) { fetchComments(s.memberName); fetchFlags('Ruard Stolper'); fetchBChanges(s.memberName) }
+    if (!s) {
+      if (!isGuestMode()) { router.replace('/'); return }
+      setIsGuest(true)
+    } else {
+      setSessionData(s)
+      fetchProgress(s.memberId)
+      if (isAdmin(s.memberName)) { fetchComments(s.memberName); fetchFlags('Ruard Stolper'); fetchBChanges(s.memberName) }
+    }
     fetch('/api/content?prefix=deel:')
       .then(r => r.json())
       .then(data => setDeelOverrides(data.overrides ?? {}))
@@ -57,8 +62,8 @@ export default function HomePage() {
       .then(data => setDynamicChapters(data.chapters ?? []))
       .catch(() => {})
 
-    const seen = localStorage.getItem('hc_order_notice')
-    if (!seen) {
+    const seen = !isGuestMode() && localStorage.getItem('hc_order_notice')
+    if (!seen && !isGuestMode()) {
       setShowOrderNotice(true)
       localStorage.setItem('hc_order_notice', '1')
     }
@@ -132,9 +137,9 @@ export default function HomePage() {
     ).length
   }
 
-  if (!session) return null
+  if (!session && !isGuest) return null
 
-  const admin = isAdmin(session.memberName)
+  const admin = !isGuest && !!session && isAdmin(session.memberName)
   const unreadCount = comments.filter(c => !c.read).length
 
   const totalChapters = DELEN.reduce((sum, d) => sum + visibleChapters(d.id).length, 0)
@@ -143,23 +148,41 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-stone-50 pb-12">
+      {/* Guest banner */}
+      {isGuest && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-amber-800 leading-snug flex-1">Je bekijkt als gast — antwoorden worden niet opgeslagen.</p>
+          <button onClick={() => { clearGuestMode(); router.replace('/') }}
+            className="text-xs font-semibold bg-amber-800 text-white px-3 py-1.5 rounded-xl shrink-0">
+            Registreer
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-stone-100 px-5 py-4 flex items-center justify-between sticky top-0 z-10">
-        <button onClick={() => setShowProfile(true)} className="text-left active:opacity-70 transition-opacity">
-          <p className="text-[11px] text-stone-400 uppercase tracking-wider">Ingelogd als</p>
-          <p className="font-semibold text-stone-900 text-sm leading-tight flex items-center gap-1">
-            {session.memberName}
-            <span className="text-stone-300 text-xs">›</span>
-          </p>
-        </button>
-        {session.isSingle ? (
+        {isGuest ? (
+          <div>
+            <p className="text-[11px] text-stone-400 uppercase tracking-wider">Gast</p>
+            <p className="font-semibold text-stone-900 text-sm leading-tight">Huwelijkscursus</p>
+          </div>
+        ) : (
+          <button onClick={() => setShowProfile(true)} className="text-left active:opacity-70 transition-opacity">
+            <p className="text-[11px] text-stone-400 uppercase tracking-wider">Ingelogd als</p>
+            <p className="font-semibold text-stone-900 text-sm leading-tight flex items-center gap-1">
+              {session!.memberName}
+              <span className="text-stone-300 text-xs">›</span>
+            </p>
+          </button>
+        )}
+        {!isGuest && (session!.isSingle ? (
           <span className="text-[11px] bg-stone-100 text-stone-500 px-3 py-1 rounded-full font-medium">Persoonlijk</span>
         ) : (
           <div className="text-right">
             <p className="text-[11px] text-stone-400 uppercase tracking-wider">Koppelcode</p>
-            <p className="font-mono font-bold text-stone-900 text-sm tracking-widest">{session.coupleCode}</p>
+            <p className="font-mono font-bold text-stone-900 text-sm tracking-widest">{session!.coupleCode}</p>
           </div>
-        )}
+        ))}
       </div>
 
       {/* Admin tab bar */}
@@ -330,9 +353,11 @@ export default function HomePage() {
         <div className="pt-7 pb-5">
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Huwelijkscursus</h1>
           <p className="text-stone-400 text-sm mt-1">
-            {totalDone === 0
-              ? 'Kies een blok om te beginnen'
-              : `${totalDone} van ${totalChapters} hoofdstukken afgerond`}
+            {isGuest
+              ? 'Bekijk de inhoud — registreer om voortgang bij te houden'
+              : totalDone === 0
+                ? 'Kies een blok om te beginnen'
+                : `${totalDone} van ${totalChapters} hoofdstukken afgerond`}
           </p>
           {totalDone > 0 && (
             <div className="mt-3 h-1.5 bg-stone-200 rounded-full overflow-hidden">

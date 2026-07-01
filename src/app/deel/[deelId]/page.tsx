@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { getSession } from '@/lib/session'
+import { getSession, isGuestMode } from '@/lib/session'
 import { getDeel, getChapter } from '@/content'
 import { isEditor } from '@/lib/roles'
 import { renderContent } from '@/lib/renderContent'
@@ -39,11 +39,13 @@ export default function DeelPage() {
 
   useEffect(() => {
     const s = getSession()
-    if (!s) { router.replace('/'); return }
-    setSessionData(s)
-    fetch(`/api/progress?memberId=${s.memberId}`)
-      .then(r => r.json())
-      .then(data => setProgress(data.progress ?? []))
+    if (!s && !isGuestMode()) { router.replace('/'); return }
+    if (s) {
+      setSessionData(s)
+      fetch(`/api/progress?memberId=${s.memberId}`)
+        .then(r => r.json())
+        .then(data => setProgress(data.progress ?? []))
+    }
     fetch(`/api/content?prefix=deel:${deelId}:`)
       .then(r => r.json())
       .then(data => setOverrides(data.overrides ?? {}))
@@ -115,9 +117,9 @@ export default function DeelPage() {
     </div>
   )
 
-  if (!session) return null
+  if (!session && !isGuestMode()) return null
 
-  const editor = isEditor(session.memberName)
+  const editor = !!session && isEditor(session.memberName)
   const ck = (suffix: string) => `deel:${deelId}:${suffix}`
   const t = (key: string, fallback: string) => overrides[ck(key)] ?? fallback
   const deelTitle = t('title', deel.title)
@@ -197,10 +199,10 @@ export default function DeelPage() {
         </p>
         <div className="space-y-2">
           {allChapters.map((ch, displayIdx) => {
-            const myDone = isChapterDone(ch.id, session.memberId)
-            const partnerEntry = progress.find(
+            const myDone = session ? isChapterDone(ch.id, session.memberId) : false
+            const partnerEntry = session ? progress.find(
               p => p.chapterId === ch.id && p.memberId !== session.memberId && p.done
-            )
+            ) : undefined
             return (
               <div key={ch.id} className="relative group">
                 <button

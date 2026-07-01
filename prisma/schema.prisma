@@ -19,9 +19,17 @@ model Couple {
 }
 
 model Begeleider {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
+  id            String    @id @default(cuid())
+  name          String    @unique
+  email         String?   @unique
+  pinHash       String?
+  pinSalt       String?
+  emailToken    String?
+  tokenExpiry   DateTime?
+  emailVerified Boolean   @default(false)
+  coupleId      String?
+  memberId      String?
+  createdAt     DateTime  @default(now())
 }
 
 model QuestionFlag {

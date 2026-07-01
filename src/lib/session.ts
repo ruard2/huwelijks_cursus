@@ -53,3 +53,16 @@ export function setSession(session: Session) {
 export function clearSession() {
   Object.values(KEYS).forEach(k => localStorage.removeItem(k))
 }
+
+export function isGuestMode(): boolean {
+  if (typeof window === 'undefined') return false
+  return sessionStorage.getItem('hc_guest') === '1'
+}
+
+export function setGuestMode() {
+  if (typeof window !== 'undefined') sessionStorage.setItem('hc_guest', '1')
+}
+
+export function clearGuestMode() {
+  if (typeof window !== 'undefined') sessionStorage.removeItem('hc_guest')
+}

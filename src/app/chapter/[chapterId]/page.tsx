@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { getSession } from '@/lib/session'
+import { getSession, isGuestMode } from '@/lib/session'
 import { getChapter } from '@/content'
 import type { Chapter, Deel, Section, Subsection, Question } from '@/content'
 import { encryptAnswer, decryptAnswer } from '@/lib/crypto'
@@ -40,6 +40,7 @@ export default function ChapterPage() {
   const chapterId = params.chapterId as string
 
   const [session, setSessionData] = useState<ReturnType<typeof getSession>>(null)
+  const [isGuest, setIsGuest] = useState(false)
   const [chapterData, setChapterData] = useState<{ chapter: Chapter; deel: Deel } | null>(null)
   const [answers, setAnswers] = useState<AnswerMap>({})
   const [overrides, setOverrides] = useState<Record<string, string>>({})
@@ -63,7 +64,22 @@ export default function ChapterPage() {
 
   useEffect(() => {
     const s = getSession()
-    if (!s) { router.replace('/'); return }
+    if (!s) {
+      if (!isGuestMode()) { router.replace('/'); return }
+      setIsGuest(true)
+      const cd = getChapter(chapterId)
+      if (cd) { setChapterData(cd); loadOverrides(chapterId) }
+      else fetch(`/api/chapters?id=${chapterId}`).then(r => r.json()).then(data => {
+        if (!data.chapter) { router.replace('/home'); return }
+        const { getDeel } = require('@/content') as typeof import('@/content')
+        const deel = getDeel(data.chapter.deelId)
+        if (!deel) { router.replace('/home'); return }
+        setChapterData({ chapter: { id: chapterId, number: '', title: '', deelId: data.chapter.deelId, sections: [] }, deel })
+        setIsDynamic(true)
+        loadOverrides(chapterId)
+      })
+      return
+    }
     setSessionData(s)
     const cd = getChapter(chapterId)
     if (cd) {
@@ -147,7 +163,7 @@ export default function ChapterPage() {
 
   const saveAnswer = useCallback(async (questionId: string, value: string, isPrivate: boolean) => {
     const s = getSession()
-    if (!s) return
+    if (!s || isGuestMode()) return
     let storedValue = value
     if (isPrivate && value) storedValue = await encryptAnswer(value, s.coupleCode)
     await fetch('/api/answers', {
@@ -211,14 +227,15 @@ export default function ChapterPage() {
     }))
   }
 
-  if (!session || !chapterData) return null
+  if (!chapterData) return null
+  if (!session && !isGuest) return null
   const { chapter, deel } = chapterData
-  const editor = isEditor(session.memberName) || !!session.isBegeleider
+  const editor = !isGuest && !!session && (isEditor(session.memberName) || !!session.isBegeleider)
   const subsectionToShow = chapter.subsections?.find(s => s.id === activeSubsection)
 
-  const myPersonalDone = answers['personal:done']?.mine?.value === 'true'
-  const partnerPersonalDone = answers['personal:done']?.partner?.value === 'true'
-  const samenUnlocked = editor || (myPersonalDone && (session.isSingle || partnerPersonalDone))
+  const myPersonalDone = isGuest || answers['personal:done']?.mine?.value === 'true'
+  const partnerPersonalDone = isGuest || answers['personal:done']?.partner?.value === 'true'
+  const samenUnlocked = isGuest || editor || (myPersonalDone && (!session || session.isSingle || partnerPersonalDone))
 
   function toggleSection(id: string) {
     setOpenSections(prev => {
@@ -750,7 +767,7 @@ export default function ChapterPage() {
                 {renderContent(subsectionToShow.intro, 'text-sm text-stone-600 leading-relaxed mb-2')}
                 <div className="mt-4">
                   {subsectionToShow.sections
-                    .filter(s => editor || !session.isSingle || s.type !== 'samen')
+                    .filter(s => editor || isGuest || !session?.isSingle || s.type !== 'samen')
                     .map(s => renderSection(s, subsectionToShow))}
                 </div>
               </div>
@@ -765,7 +782,7 @@ export default function ChapterPage() {
         )}
 
         {chapter.sections
-          .filter(s => editor || !session.isSingle || s.type !== 'samen')
+          .filter(s => editor || isGuest || !session?.isSingle || s.type !== 'samen')
           .map(s => renderSection(s))}
 
         {/* Virtual sections added by editors */}
@@ -776,7 +793,7 @@ export default function ChapterPage() {
             const vSections: { id: string; type: string; title: string; questions: { id: string; text: string; hint: string }[] }[] = JSON.parse(overrides[ck('extra-sections')] ?? '[]')
             return vSections
               .filter(vs => vs.questions.length > 0)
-              .filter(vs => editor || !session.isSingle || vs.type !== 'samen')
+              .filter(vs => editor || isGuest || !session?.isSingle || vs.type !== 'samen')
               .map(vs => {
                 const vsKey = `vs:${vs.id}`
                 const isOpen = openSections.has(vsKey)
@@ -850,19 +867,38 @@ export default function ChapterPage() {
           } catch { return null }
         })()}
 
-        {chapterId !== '22' && (
+        {!isGuest && chapterId !== '22' && (
           <TakeawayBlock answers={answers} onChange={handleTakeawayChange} />
         )}
 
-        <div className="mt-4 pt-4 border-t border-stone-100">
-          <CommentPopup chapterId={chapterId} chapterTitle={txt('title', String(chapter.title))} />
-        </div>
+        {!isGuest && (
+          <div className="mt-4 pt-4 border-t border-stone-100">
+            <CommentPopup chapterId={chapterId} chapterTitle={txt('title', String(chapter.title))} />
+          </div>
+        )}
+
+        {isGuest && (
+          <div className="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
+            <p className="text-sm font-semibold text-amber-900 mb-1">Antwoorden worden niet opgeslagen</p>
+            <p className="text-xs text-amber-700 mb-3 leading-relaxed">Maak een gratis account aan om antwoorden op te slaan en voortgang bij te houden.</p>
+            <button onClick={() => router.replace('/')}
+              className="px-5 py-2.5 bg-amber-800 text-white rounded-xl text-sm font-semibold">
+              Account aanmaken →
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-100 px-4 py-3">
-        <button onClick={() => setShowExitDialog(true)} className="w-full py-3 bg-stone-900 text-white rounded-2xl font-semibold text-sm">
-          Klaar met dit hoofdstuk
-        </button>
+        {isGuest ? (
+          <button onClick={() => router.back()} className="w-full py-3 bg-stone-200 text-stone-700 rounded-2xl font-semibold text-sm">
+            ← Terug naar overzicht
+          </button>
+        ) : (
+          <button onClick={() => setShowExitDialog(true)} className="w-full py-3 bg-stone-900 text-white rounded-2xl font-semibold text-sm">
+            Klaar met dit hoofdstuk
+          </button>
+        )}
       </div>
 
       {flagPopup && (
@@ -945,7 +981,7 @@ export default function ChapterPage() {
           deelColor={deel.color}
           overrides={overrides}
           isDynamic={isDynamic}
-          begeleiderName={session.isBegeleider && !isEditor(session.memberName) ? session.memberName : undefined}
+          begeleiderName={session?.isBegeleider && !isEditor(session.memberName) ? session.memberName : undefined}
           onSaved={updates => setOverrides(prev => ({ ...prev, ...updates }))}
           onClose={() => setShowEditor(false)}
           onDeleted={() => router.replace(`/deel/${chapter.deelId}`)}
