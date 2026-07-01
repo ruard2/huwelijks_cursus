@@ -11,6 +11,8 @@ import { isEditor } from '@/lib/roles'
 import { renderContent } from '@/lib/renderContent'
 import ChapterEditor from '@/components/ChapterEditor'
 import CommentPopup from '@/components/CommentPopup'
+import TakeawayBlock from '@/components/TakeawayBlock'
+import TakeawaySummary from '@/components/TakeawaySummary'
 import type Pusher from 'pusher-js'
 import type { Channel } from 'pusher-js'
 
@@ -121,7 +123,10 @@ export default function ChapterPage() {
   }
 
   async function loadOverrides(chapId: string) {
-    const res = await fetch(`/api/content?prefix=ch:${chapId}:`)
+    const s = getSession()
+    const bName = s?.isBegeleider ? encodeURIComponent(s.memberName) : ''
+    const url = `/api/content?prefix=ch:${chapId}:${bName ? `&begeleiderName=${bName}` : ''}`
+    const res = await fetch(url)
     if (res.ok) setOverrides((await res.json()).overrides)
   }
 
@@ -184,6 +189,15 @@ export default function ChapterPage() {
     router.back()
   }
 
+  function handleTakeawayChange(questionId: string, value: string) {
+    setAnswers(prev => ({
+      ...prev,
+      [questionId]: { ...prev[questionId], mine: { ...(prev[questionId]?.mine ?? {}), questionId, value, isPrivate: false } as AnswerRecord },
+    }))
+    clearTimeout(saveTimers.current[questionId])
+    saveTimers.current[questionId] = setTimeout(() => saveAnswer(questionId, value, false), 800)
+  }
+
   async function markPersonalDone() {
     const s = getSession()
     if (!s) return
@@ -199,7 +213,7 @@ export default function ChapterPage() {
 
   if (!session || !chapterData) return null
   const { chapter, deel } = chapterData
-  const editor = isEditor(session.memberName)
+  const editor = isEditor(session.memberName) || !!session.isBegeleider
   const subsectionToShow = chapter.subsections?.find(s => s.id === activeSubsection)
 
   const myPersonalDone = answers['personal:done']?.mine?.value === 'true'
@@ -324,7 +338,7 @@ export default function ChapterPage() {
     )
   }
 
-  function renderExtraQ(eq: { id: string; text: string; hint: string; type?: string; options?: string[]; min?: number; max?: number }, qKey: string, sectionType?: string) {
+  function renderExtraQ(eq: { id: string; text: string; hint: string; type?: string; options?: string[]; min?: number; max?: number; followUp?: string; parts?: { id: string; label: string }[] }, qKey: string, sectionType?: string) {
     const myAnswer = answers[qKey]?.mine
     const partnerAnswer = answers[qKey]?.partner
     const isPrivate = myAnswer?.isPrivate ?? false
@@ -744,6 +758,12 @@ export default function ChapterPage() {
           </div>
         )}
 
+        {chapterId === '22' && (
+          <div className="mb-5">
+            <TakeawaySummary />
+          </div>
+        )}
+
         {chapter.sections
           .filter(s => editor || !session.isSingle || s.type !== 'samen')
           .map(s => renderSection(s))}
@@ -829,6 +849,10 @@ export default function ChapterPage() {
             )
           } catch { return null }
         })()}
+
+        {chapterId !== '22' && (
+          <TakeawayBlock answers={answers} onChange={handleTakeawayChange} />
+        )}
 
         <div className="mt-4 pt-4 border-t border-stone-100">
           <CommentPopup chapterId={chapterId} chapterTitle={txt('title', String(chapter.title))} />
@@ -921,6 +945,7 @@ export default function ChapterPage() {
           deelColor={deel.color}
           overrides={overrides}
           isDynamic={isDynamic}
+          begeleiderName={session.isBegeleider && !isEditor(session.memberName) ? session.memberName : undefined}
           onSaved={updates => setOverrides(prev => ({ ...prev, ...updates }))}
           onClose={() => setShowEditor(false)}
           onDeleted={() => router.replace(`/deel/${chapter.deelId}`)}

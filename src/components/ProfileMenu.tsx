@@ -11,10 +11,54 @@ interface Props {
 
 export default function ProfileMenu({ onClose, onNameChanged, onLogout }: Props) {
   const session = getSession()
-  const [view, setView] = useState<'menu' | 'name' | 'reset' | 'confirm-logout'>('menu')
+  const [view, setView] = useState<'menu' | 'name' | 'pin' | 'reset' | 'confirm-logout'>('menu')
   const [newName, setNewName] = useState(session?.memberName ?? '')
+  const [currentPin, setCurrentPin] = useState('')
+  const [newPin, setNewPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [hasPin, setHasPin] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [pinSuccess, setPinSuccess] = useState('')
+
+  async function savePin() {
+    if (!newPin.trim() || newPin.length < 4) return setError('PIN moet minimaal 4 cijfers zijn')
+    if (newPin !== confirmPin) return setError('PINs komen niet overeen')
+    setSaving(true); setError('')
+    const s = getSession()
+    if (!s) return
+    const res = await fetch('/api/member/pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-member-id': s.memberId },
+      body: JSON.stringify({ currentPin: hasPin ? currentPin : undefined, newPin }),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!res.ok) { setError(data.error); return }
+    setHasPin(true)
+    setPinSuccess('PIN opgeslagen ✓')
+    setCurrentPin(''); setNewPin(''); setConfirmPin('')
+    setTimeout(() => { setPinSuccess(''); onClose() }, 1500)
+  }
+
+  async function removePin() {
+    if (!currentPin.trim()) return setError('Voer je huidige PIN in')
+    setSaving(true); setError('')
+    const s = getSession()
+    if (!s) return
+    const res = await fetch('/api/member/pin', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'x-member-id': s.memberId },
+      body: JSON.stringify({ currentPin }),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!res.ok) { setError(data.error); return }
+    setHasPin(false)
+    setPinSuccess('PIN verwijderd ✓')
+    setCurrentPin('')
+    setTimeout(() => { setPinSuccess(''); setView('menu') }, 1500)
+  }
 
   async function saveName() {
     if (!newName.trim()) return setError('Vul een naam in')
@@ -68,6 +112,17 @@ export default function ProfileMenu({ onClose, onNameChanged, onLogout }: Props)
               </button>
 
               <button
+                onClick={() => { setView('pin'); setCurrentPin(''); setNewPin(''); setConfirmPin(''); setError(''); setPinSuccess('') }}
+                className="w-full flex items-center gap-3 px-4 py-3.5 bg-stone-50 rounded-2xl text-left active:bg-stone-100 transition-colors"
+              >
+                <span className="text-xl">🔒</span>
+                <div>
+                  <p className="text-sm font-semibold text-stone-900">PIN {hasPin ? 'wijzigen' : 'instellen'}</p>
+                  <p className="text-xs text-stone-400">{hasPin ? 'Huidige PIN aanpassen of verwijderen' : 'Extra beveiliging met een PIN-code'}</p>
+                </div>
+              </button>
+
+              <button
                 onClick={() => setView('reset')}
                 className="w-full flex items-center gap-3 px-4 py-3.5 bg-stone-50 rounded-2xl text-left active:bg-stone-100 transition-colors"
               >
@@ -89,6 +144,60 @@ export default function ProfileMenu({ onClose, onNameChanged, onLogout }: Props)
                 </div>
               </button>
             </div>
+          </>
+        )}
+
+        {view === 'pin' && (
+          <>
+            <button onClick={() => setView('menu')} className="text-stone-400 text-sm mb-4 flex items-center gap-1">← Terug</button>
+            <h2 className="font-bold text-stone-900 text-lg mb-4">PIN {hasPin ? 'wijzigen' : 'instellen'}</h2>
+
+            {pinSuccess ? (
+              <p className="text-green-600 font-semibold text-center py-4">{pinSuccess}</p>
+            ) : (
+              <div className="space-y-3">
+                {hasPin && (
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-500 uppercase tracking-widest mb-1">Huidige PIN</label>
+                    <input type="password" inputMode="numeric" maxLength={8} value={currentPin}
+                      onChange={e => setCurrentPin(e.target.value.replace(/\D/g, ''))}
+                      placeholder="• • • •"
+                      className="w-full px-4 py-3 border border-stone-200 rounded-xl text-base text-center tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-stone-400"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase tracking-widest mb-1">Nieuwe PIN</label>
+                  <input type="password" inputMode="numeric" maxLength={8} value={newPin}
+                    onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
+                    placeholder="• • • •"
+                    className="w-full px-4 py-3 border border-stone-200 rounded-xl text-base text-center tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-stone-400"
+                    autoFocus={!hasPin}
+                  />
+                </div>
+                {newPin.length >= 4 && (
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-500 uppercase tracking-widest mb-1">Herhaal PIN</label>
+                    <input type="password" inputMode="numeric" maxLength={8} value={confirmPin}
+                      onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                      placeholder="• • • •"
+                      className="w-full px-4 py-3 border border-stone-200 rounded-xl text-base text-center tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-stone-400"
+                    />
+                  </div>
+                )}
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <button onClick={savePin} disabled={saving}
+                  className="w-full py-3.5 bg-stone-900 text-white rounded-2xl font-semibold disabled:opacity-50">
+                  {saving ? 'Opslaan...' : 'PIN opslaan'}
+                </button>
+                {hasPin && (
+                  <button onClick={removePin} disabled={saving}
+                    className="w-full py-3 text-red-500 text-sm font-medium">
+                    PIN verwijderen
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
 

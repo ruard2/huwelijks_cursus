@@ -12,6 +12,7 @@ interface Props {
   deelColor: string
   overrides: Record<string, string>
   isDynamic?: boolean
+  begeleiderName?: string
   onSaved: (updates: Record<string, string>) => void
   onClose: () => void
   onDeleted?: () => void
@@ -23,7 +24,7 @@ function parseBronnen(raw: string): Bron[] {
   try { return JSON.parse(raw) } catch { return [] }
 }
 
-export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColor, overrides, isDynamic, onSaved, onClose, onDeleted }: Props) {
+export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColor, overrides, isDynamic, begeleiderName, onSaved, onClose, onDeleted }: Props) {
   const ck = useCallback((suffix: string) => `ch:${chapter.id}:${suffix}`, [chapter.id])
   const t = (key: string, fallback: string) => overrides[ck(key)] ?? fallback
 
@@ -155,6 +156,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
   const [saved, setSaved] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showBegeleiderNotice, setShowBegeleiderNotice] = useState(false)
 
   async function deleteChapter() {
     const session = getSession()
@@ -202,7 +204,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
       fetch('/api/content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-member-name': session?.memberName ?? '' },
-        body: JSON.stringify({ key: ck(key), value }),
+        body: JSON.stringify({ key: ck(key), value, ...(begeleiderName ? { begeleiderName } : {}) }),
       })
     ))
     const updates: Record<string, string> = {}
@@ -210,6 +212,16 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
     onSaved(updates)
     setSaving(false)
     setSaved(true)
+
+    // Show first-time notice to begeleiders
+    if (begeleiderName) {
+      const noticeKey = `hc_beg_edit_notice_${begeleiderName}`
+      if (!localStorage.getItem(noticeKey)) {
+        localStorage.setItem(noticeKey, '1')
+        setShowBegeleiderNotice(true)
+        return
+      }
+    }
     setTimeout(() => { setSaved(false); onClose() }, 1000)
   }
 
@@ -218,6 +230,29 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
 
   const showVerse = true
   const showIntro = chapter.intro !== undefined || isDynamic
+
+  if (showBegeleiderNotice) return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-stone-50 px-6">
+      <div className="bg-white rounded-2xl border border-stone-200 p-6 max-w-sm w-full shadow-sm">
+        <p className="text-2xl mb-3 text-center">✏️</p>
+        <h2 className="font-bold text-stone-900 text-lg mb-2 text-center">Opgeslagen in jouw versie</h2>
+        <p className="text-sm text-stone-600 leading-relaxed mb-4 text-center">
+          Jouw aanpassing is opgeslagen in jouw eigen versie van de cursus. De basistekst voor andere stellen blijft onveranderd.
+        </p>
+        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5">
+          <p className="text-xs text-amber-800 leading-relaxed">
+            <strong>Tip:</strong> Ruard kan jouw aanpassingen inzien en overnemen als basistekst. Zo help je de cursus voor iedereen te verbeteren.
+          </p>
+        </div>
+        <button
+          onClick={() => { setShowBegeleiderNotice(false); setSaved(false); onClose() }}
+          className="w-full py-3 bg-stone-900 text-white rounded-2xl font-semibold text-sm"
+        >
+          Begrepen
+        </button>
+      </div>
+    </div>
+  )
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-stone-50">

@@ -7,6 +7,14 @@ function stripTitle(name: string) {
 }
 
 export async function GET(req: NextRequest) {
+  // Exact match check (used at login to determine if user is a begeleider)
+  const exact = req.nextUrl.searchParams.get('exact')
+  if (exact) {
+    const found = await prisma.begeleider.findUnique({ where: { name: exact.trim() } })
+    const isAdmin = exact.trim() === 'Ruard Stolper'
+    return NextResponse.json({ isBegeleider: !!(found || isAdmin) })
+  }
+
   const q = req.nextUrl.searchParams.get('q') ?? ''
   const search = stripTitle(q).toLowerCase()
 

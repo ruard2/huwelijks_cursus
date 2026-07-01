@@ -28,9 +28,11 @@ export default function HomePage() {
   const [session, setSessionData] = useState<ReturnType<typeof getSession>>(null)
   const [progress, setProgress] = useState<ProgressEntry[]>([])
   const [showOrderNotice, setShowOrderNotice] = useState(false)
-  const [tab, setTab] = useState<'home' | 'comments' | 'flags'>('home')
+  const [tab, setTab] = useState<'home' | 'comments' | 'flags' | 'versions'>('home')
   const [comments, setComments] = useState<CommentEntry[]>([])
   const [flags, setFlags] = useState<{ id: string; memberNames: string; coupleCode: string; chapterId: string; questionText: string; answerValue?: string; note?: string; read: boolean; createdAt: string }[]>([])
+  const [bChanges, setBChanges] = useState<{ id: string; key: string; begeleiderName: string; value: string; baseValue: string | null; updatedAt: string }[]>([])
+  const [adoptedKeys, setAdoptedKeys] = useState<Set<string>>(new Set())
   const [showProfile, setShowProfile] = useState(false)
   const [deelOverrides, setDeelOverrides] = useState<Record<string, string>>({})
   const [hiddenChapters, setHiddenChapters] = useState<string[]>([])
@@ -41,7 +43,7 @@ export default function HomePage() {
     if (!s) { router.replace('/'); return }
     setSessionData(s)
     fetchProgress(s.memberId)
-    if (isAdmin(s.memberName)) { fetchComments(s.memberName); fetchFlags('Ruard Stolper') }
+    if (isAdmin(s.memberName)) { fetchComments(s.memberName); fetchFlags('Ruard Stolper'); fetchBChanges(s.memberName) }
     fetch('/api/content?prefix=deel:')
       .then(r => r.json())
       .then(data => setDeelOverrides(data.overrides ?? {}))
@@ -61,6 +63,23 @@ export default function HomePage() {
       localStorage.setItem('hc_order_notice', '1')
     }
   }, [router])
+
+  async function fetchBChanges(memberName: string) {
+    const res = await fetch('/api/content/begeleider-changes', { headers: { 'x-member-name': memberName } })
+    if (res.ok) { const data = await res.json(); setBChanges(data.changes ?? []) }
+  }
+
+  async function adoptChange(id: string, key: string, value: string) {
+    const s = getSession()
+    if (!s) return
+    await fetch('/api/content/begeleider-changes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-member-name': s.memberName },
+      body: JSON.stringify({ id, key, value }),
+    })
+    setAdoptedKeys(prev => new Set([...prev, `${key}`]))
+    setBChanges(prev => prev.map(c => c.id === id ? { ...c, baseValue: value } : c))
+  }
 
   async function fetchFlags(begeleiderName: string) {
     const res = await fetch(`/api/flags?begeleiderName=${encodeURIComponent(begeleiderName)}`)
@@ -145,23 +164,30 @@ export default function HomePage() {
 
       {/* Admin tab bar */}
       {admin && (
-        <div className="bg-white border-b border-stone-100 flex">
+        <div className="bg-white border-b border-stone-100 flex overflow-x-auto">
           <button onClick={() => setTab('home')}
-            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${tab === 'home' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap px-2 ${tab === 'home' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
             Overzicht
           </button>
           <button onClick={() => setTab('flags')}
-            className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative ${tab === 'flags' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative whitespace-nowrap px-2 ${tab === 'flags' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
             Doorgestuurd
             {flags.filter(f => !f.read).length > 0 && (
               <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-indigo-500 text-white text-[9px] font-bold">{flags.filter(f => !f.read).length}</span>
             )}
           </button>
           <button onClick={() => setTab('comments')}
-            className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative ${tab === 'comments' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative whitespace-nowrap px-2 ${tab === 'comments' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
             Reacties
             {unreadCount > 0 && (
               <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">{unreadCount}</span>
+            )}
+          </button>
+          <button onClick={() => setTab('versions')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative whitespace-nowrap px-2 ${tab === 'versions' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
+            Versies
+            {bChanges.length > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold">{bChanges.length}</span>
             )}
           </button>
         </div>
@@ -200,6 +226,60 @@ export default function HomePage() {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Versions panel (admin only) */}
+      {admin && tab === 'versions' && (
+        <div className="max-w-lg mx-auto px-4 py-6">
+          {bChanges.length === 0 ? (
+            <p className="text-center text-stone-400 text-sm py-12">Geen aanpassingen van begeleiders gevonden</p>
+          ) : (
+            <div className="space-y-4">
+              {/* Group by begeleider */}
+              {[...new Set(bChanges.map(c => c.begeleiderName))].map(bName => {
+                const changes = bChanges.filter(c => c.begeleiderName === bName)
+                return (
+                  <div key={bName} className="bg-white rounded-2xl border border-stone-100 overflow-hidden">
+                    <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-100">
+                      <p className="text-xs font-bold text-amber-800">{bName}</p>
+                      <p className="text-[10px] text-amber-600">{changes.length} aanpassing{changes.length !== 1 ? 'en' : ''}</p>
+                    </div>
+                    <div className="divide-y divide-stone-50">
+                      {changes.map(c => {
+                        const adopted = adoptedKeys.has(c.key) || (c.baseValue === c.value)
+                        return (
+                          <div key={c.id} className="px-4 py-3">
+                            <p className="text-[10px] font-mono text-stone-400 mb-1.5 break-all">{c.key}</p>
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                              <div className="bg-stone-50 rounded-xl px-3 py-2">
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-stone-400 mb-1">Basis</p>
+                                <p className="text-xs text-stone-500 leading-relaxed line-clamp-3">{c.baseValue || <span className="italic opacity-50">leeg</span>}</p>
+                              </div>
+                              <div className="bg-amber-50 rounded-xl px-3 py-2">
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-amber-600 mb-1">{bName.split(' ')[0]}</p>
+                                <p className="text-xs text-stone-700 leading-relaxed line-clamp-3">{c.value}</p>
+                              </div>
+                            </div>
+                            {adopted ? (
+                              <p className="text-[10px] text-green-600 font-semibold">✓ Overgenomen</p>
+                            ) : (
+                              <button
+                                onClick={() => adoptChange(c.id, c.key, c.value)}
+                                className="text-xs bg-stone-900 text-white px-3 py-1.5 rounded-xl font-semibold hover:bg-stone-700 transition-colors"
+                              >
+                                Overnemen als basistekst
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

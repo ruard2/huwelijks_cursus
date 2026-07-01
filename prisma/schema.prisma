@@ -8,10 +8,13 @@ datasource db {
 }
 
 model Couple {
-  id             String   @id @default(cuid())
-  code           String   @unique
+  id             String    @id @default(cuid())
+  code           String    @unique
+  email          String?
   begeleiderName String?
-  createdAt      DateTime @default(now())
+  recoveryToken  String?
+  tokenExpiry    DateTime?
+  createdAt      DateTime  @default(now())
   members        Member[]
 }
 
@@ -39,6 +42,8 @@ model Member {
   id        String     @id @default(cuid())
   coupleId  String
   name      String
+  pinHash   String?
+  pinSalt   String?
   createdAt DateTime   @default(now())
   couple    Couple     @relation(fields: [coupleId], references: [id])
   answers   Answer[]
@@ -77,6 +82,17 @@ model ContentOverride {
   key       String   @unique
   value     String   @db.Text
   updatedAt DateTime @updatedAt
+}
+
+model BegeleiderContentOverride {
+  id             String   @id @default(cuid())
+  key            String
+  value          String   @db.Text
+  begeleiderName String
+  updatedAt      DateTime @updatedAt
+
+  @@unique([key, begeleiderName])
+  @@index([begeleiderName])
 }
 
 model Comment {

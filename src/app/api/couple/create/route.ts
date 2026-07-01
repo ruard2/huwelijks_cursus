@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { generateSalt, hashPin } from '@/lib/auth'
 
 const WORDS = [
   'TROUW', 'LIEFDE', 'HOOP', 'VREDE', 'GENADE', 'ZEGEN', 'TROTS', 'VERBOND',
@@ -14,7 +15,7 @@ function generateCode(): string {
 }
 
 export async function POST(req: NextRequest) {
-  const { name } = await req.json()
+  const { name, email, pin } = await req.json()
   if (!name?.trim()) {
     return NextResponse.json({ error: 'Naam is verplicht' }, { status: 400 })
   }
@@ -28,9 +29,14 @@ export async function POST(req: NextRequest) {
     attempts++
   }
 
-  const couple = await prisma.couple.create({ data: { code } })
+  const pinSalt = pin?.trim() ? generateSalt() : undefined
+  const pinHash = pin?.trim() && pinSalt ? hashPin(pin.trim(), pinSalt) : undefined
+
+  const couple = await prisma.couple.create({
+    data: { code, email: email?.trim() || null },
+  })
   const member = await prisma.member.create({
-    data: { coupleId: couple.id, name: name.trim() },
+    data: { coupleId: couple.id, name: name.trim(), pinHash, pinSalt },
   })
 
   return NextResponse.json({
@@ -38,5 +44,6 @@ export async function POST(req: NextRequest) {
     coupleCode: couple.code,
     memberId: member.id,
     memberName: member.name,
+    hasPin: !!pinHash,
   })
 }
