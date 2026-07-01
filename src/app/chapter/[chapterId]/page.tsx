@@ -47,6 +47,7 @@ export default function ChapterPage() {
   const [showVerdieping, setShowVerdieping] = useState(false)
   const [showExitDialog, setShowExitDialog] = useState(false)
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
+  const [followUpPopup, setFollowUpPopup] = useState<{ qKey: string; text: string } | null>(null)
   const pusherRef = useRef<InstanceType<typeof Pusher> | null>(null)
   const channelRef = useRef<Channel | null>(null)
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -237,7 +238,7 @@ export default function ChapterPage() {
     if (q.type === 'checkbox' && q.options) {
       const selected = myAnswer?.value ? JSON.parse(myAnswer.value) as string[] : []
       const partnerSelected = partnerAnswer?.value ? JSON.parse(partnerAnswer.value) as string[] : []
-      const showPartner = section?.type === 'samen' || selected.length > 0
+      const showPartner = section?.type === 'samen' || myPersonalDone
       function toggleOption(opt: string) {
         const newSelected = selected.includes(opt) ? selected.filter(s => s !== opt) : [...selected, opt]
         const value = JSON.stringify(newSelected)
@@ -286,7 +287,7 @@ export default function ChapterPage() {
                     className="w-full px-4 py-3 pr-10 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300" />
                   <button onClick={() => togglePrivate(partKey)} className="absolute top-3 right-3 text-base">{partPrivate ? '🔒' : '👁'}</button>
                 </div>
-                {partnerPart?.value && (section?.type === 'samen' || !!myPart?.value) && (
+                {partnerPart?.value && (section?.type === 'samen' || myPersonalDone) && (
                   <div className="mt-1 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
                     <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerPart.memberName}</p>
                     <p className="text-sm text-stone-700">{partnerPart.value}</p>
@@ -309,7 +310,7 @@ export default function ChapterPage() {
         <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
           placeholder={q.placeholder ?? 'Jouw antwoord...'}
           className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
-        {partnerAnswer?.value && (section?.type === 'samen' || !!myAnswer?.value) && (
+        {partnerAnswer?.value && (section?.type === 'samen' || myPersonalDone) && (
           <div className="mt-2 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
             <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerAnswer.memberName}</p>
             <p className="text-sm text-stone-700 whitespace-pre-wrap">{partnerAnswer.value}</p>
@@ -323,7 +324,7 @@ export default function ChapterPage() {
     const myAnswer = answers[qKey]?.mine
     const partnerAnswer = answers[qKey]?.partner
     const isPrivate = myAnswer?.isPrivate ?? false
-    const showPartner = sectionType === 'samen' || !!myAnswer?.value
+    const showPartner = sectionType === 'samen' || myPersonalDone
     const togglePriv = () => {
       const newPrivate = !isPrivate
       const value = myAnswer?.value ?? ''
@@ -375,12 +376,26 @@ export default function ChapterPage() {
             <input type="range" min={eq.min ?? 1} max={eq.max ?? 10} step={1}
               value={myAnswer?.value ? Number(myAnswer.value) : (eq.min ?? 1)}
               onChange={e => handleChange(qKey, e.target.value)}
+              onPointerUp={() => { if (eq.followUp && myAnswer?.value) setFollowUpPopup({ qKey, text: eq.followUp }) }}
               className="w-full accent-stone-900" />
             <div className="flex justify-between text-xs text-stone-400 mt-1">
               <span>{eq.min ?? 1}</span>
               <span className="font-semibold text-stone-700 text-sm">{myAnswer?.value || (eq.min ?? 1)}</span>
               <span>{eq.max ?? 10}</span>
             </div>
+            {eq.followUp && answers[`${qKey}:fu`]?.mine?.value && (
+              <button onClick={() => setFollowUpPopup({ qKey, text: eq.followUp! })}
+                className="mt-2 w-full text-left bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-500">
+                <span className="text-[10px] font-semibold text-stone-400 block mb-0.5">{eq.followUp}</span>
+                {answers[`${qKey}:fu`].mine!.value}
+              </button>
+            )}
+            {eq.followUp && !answers[`${qKey}:fu`]?.mine?.value && myAnswer?.value && (
+              <button onClick={() => setFollowUpPopup({ qKey, text: eq.followUp! })}
+                className="mt-2 w-full text-left border border-dashed border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-400 hover:border-stone-300 transition-colors">
+                + {eq.followUp}
+              </button>
+            )}
           </div>
         )}
         {partnerAnswer?.value && showPartner && (
@@ -389,6 +404,16 @@ export default function ChapterPage() {
             <p className="text-sm text-stone-700 whitespace-pre-wrap">{partnerAnswer.value}</p>
           </div>
         )}
+        {eq.type === 'slider' && eq.followUp && (() => {
+          const fuKey = `${qKey}:fu`
+          const fuPartner = answers[fuKey]?.partner
+          return fuPartner?.value && showPartner ? (
+            <div className="mt-2 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
+              <p className="text-[10px] font-semibold text-blue-600 mb-0.5">{fuPartner.memberName.split(' ')[0]} — {eq.followUp}</p>
+              <p className="text-sm text-stone-700 whitespace-pre-wrap">{fuPartner.value}</p>
+            </div>
+          ) : null
+        })()}
       </div>
     )
   }
@@ -750,6 +775,25 @@ export default function ChapterPage() {
           Klaar met dit hoofdstuk
         </button>
       </div>
+
+      {followUpPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+            <p className="font-semibold text-stone-900 text-sm mb-3">{followUpPopup.text}</p>
+            <textarea
+              autoFocus
+              value={answers[`${followUpPopup.qKey}:fu`]?.mine?.value ?? ''}
+              onChange={e => handleChange(`${followUpPopup.qKey}:fu`, e.target.value)}
+              placeholder="Jouw antwoord..."
+              className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[100px] mb-4"
+            />
+            <button onClick={() => setFollowUpPopup(null)}
+              className="w-full py-3 bg-stone-900 text-white rounded-2xl font-semibold text-sm">
+              Klaar
+            </button>
+          </div>
+        </div>
+      )}
 
       {showExitDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50 p-4">

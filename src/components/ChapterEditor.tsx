@@ -62,7 +62,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
     return d
   })
 
-  interface ExtraQ { id: string; text: string; hint: string; type?: 'text' | 'meerkeuze' | 'slider'; options?: string[]; min?: number; max?: number }
+  interface ExtraQ { id: string; text: string; hint: string; type?: 'text' | 'meerkeuze' | 'slider'; options?: string[]; min?: number; max?: number; followUp?: string }
   interface VirtualSection { id: string; type: 'personal' | 'samen' | 'reflection' | 'personal_man' | 'personal_vrouw'; title: string; questions: ExtraQ[] }
 
   // Extra questions added by editors per section
@@ -510,16 +510,24 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                   </div>
                 )}
                 {eq.type === 'slider' && (
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="block text-[10px] text-stone-400 mb-0.5">Min</label>
-                      <input type="number" value={eq.min ?? 1} onChange={e => updateExtraQuestion(s.id, idx, { min: parseInt(e.target.value) || 1 })} className={inputCls} />
+                  <>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="block text-[10px] text-stone-400 mb-0.5">Min</label>
+                        <input type="number" value={eq.min ?? 1} onChange={e => updateExtraQuestion(s.id, idx, { min: parseInt(e.target.value) || 1 })} className={inputCls} />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-[10px] text-stone-400 mb-0.5">Max</label>
+                        <input type="number" value={eq.max ?? 10} onChange={e => updateExtraQuestion(s.id, idx, { max: parseInt(e.target.value) || 10 })} className={inputCls} />
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <label className="block text-[10px] text-stone-400 mb-0.5">Max</label>
-                      <input type="number" value={eq.max ?? 10} onChange={e => updateExtraQuestion(s.id, idx, { max: parseInt(e.target.value) || 10 })} className={inputCls} />
+                    <div>
+                      <label className="block text-[10px] text-stone-400 mb-0.5">Verdiepende vraag (popup na invullen, optioneel)</label>
+                      <input type="text" value={eq.followUp ?? ''}
+                        onChange={e => updateExtraQuestion(s.id, idx, { followUp: e.target.value || undefined })}
+                        placeholder="Waarom koos je dit cijfer?" className={inputCls} />
                     </div>
-                  </div>
+                  </>
                 )}
                 <div>
                   <label className="block text-[10px] text-stone-400 mb-0.5">Toelichting (grijs, optioneel)</label>
@@ -649,16 +657,24 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                     </div>
                   )}
                   {q.type === 'slider' && (
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <label className="block text-[10px] text-stone-400 mb-0.5">Min</label>
-                        <input type="number" value={q.min ?? 1} onChange={e => updateVirtualQuestion(vs.id, qi, { min: parseInt(e.target.value) || 1 })} className={inputCls} />
+                    <>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-stone-400 mb-0.5">Min</label>
+                          <input type="number" value={q.min ?? 1} onChange={e => updateVirtualQuestion(vs.id, qi, { min: parseInt(e.target.value) || 1 })} className={inputCls} />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-stone-400 mb-0.5">Max</label>
+                          <input type="number" value={q.max ?? 10} onChange={e => updateVirtualQuestion(vs.id, qi, { max: parseInt(e.target.value) || 10 })} className={inputCls} />
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <label className="block text-[10px] text-stone-400 mb-0.5">Max</label>
-                        <input type="number" value={q.max ?? 10} onChange={e => updateVirtualQuestion(vs.id, qi, { max: parseInt(e.target.value) || 10 })} className={inputCls} />
+                      <div>
+                        <label className="block text-[10px] text-stone-400 mb-0.5">Verdiepende vraag (popup na invullen, optioneel)</label>
+                        <input type="text" value={q.followUp ?? ''}
+                          onChange={e => updateVirtualQuestion(vs.id, qi, { followUp: e.target.value || undefined })}
+                          placeholder="Waarom koos je dit cijfer?" className={inputCls} />
                       </div>
-                    </div>
+                    </>
                   )}
                   <div>
                     <label className="block text-[10px] text-stone-400 mb-0.5">Toelichting (grijs, optioneel)</label>
