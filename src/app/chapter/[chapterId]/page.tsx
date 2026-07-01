@@ -249,7 +249,7 @@ export default function ChapterPage() {
     const qKey = buildKey(section, subsection, q)
     const myAnswer = answers[qKey]?.mine
     const partnerAnswer = answers[qKey]?.partner
-    const isPrivate = myAnswer?.isPrivate ?? false
+    const isPrivate = myAnswer?.isPrivate ?? true
     const prefix = subsection
       ? `sub:${subsection.id}.s:${section?.id}.q:${q.id}`
       : `s:${section?.id}.q:${q.id}`
@@ -338,13 +338,15 @@ export default function ChapterPage() {
       <div key={q.id} className="mb-5">
         <div className="flex items-start gap-2 mb-1">
           <p className="text-sm font-medium text-stone-700 flex-1">{qText}</p>
-          <FlagBtn questionText={qText} questionId={qKey} answerValue={myAnswer?.value} />
           <button onClick={() => togglePrivate(qKey)} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
         </div>
         {qHint && <p className="text-xs text-stone-400 mb-2">{qHint}</p>}
         <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
           placeholder={q.placeholder ?? 'Jouw antwoord...'}
           className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
+        <div className="flex justify-end mt-1">
+          <FlagBtn questionText={qText} questionId={qKey} answerValue={myAnswer?.value} />
+        </div>
         {partnerAnswer?.value && (section?.type === 'samen' || myPersonalDone) && (
           <div className="mt-2 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
             <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerAnswer.memberName}</p>
@@ -358,7 +360,7 @@ export default function ChapterPage() {
   function renderExtraQ(eq: { id: string; text: string; hint: string; type?: string; options?: string[]; min?: number; max?: number; followUp?: string; parts?: { id: string; label: string }[] }, qKey: string, sectionType?: string) {
     const myAnswer = answers[qKey]?.mine
     const partnerAnswer = answers[qKey]?.partner
-    const isPrivate = myAnswer?.isPrivate ?? false
+    const isPrivate = myAnswer?.isPrivate ?? true
     const showPartner = sectionType === 'samen' || myPersonalDone
     const togglePriv = () => {
       const newPrivate = !isPrivate
@@ -370,14 +372,18 @@ export default function ChapterPage() {
       <div key={qKey} className="mb-5">
         <div className="flex items-start gap-2 mb-1">
           <p className="text-sm font-medium text-stone-700 flex-1">{eq.text}</p>
-          <FlagBtn questionText={eq.text} questionId={qKey} answerValue={myAnswer?.value} />
           <button onClick={togglePriv} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
         </div>
         {eq.hint && <p className="text-xs text-stone-400 mb-2">{eq.hint}</p>}
         {(!eq.type || eq.type === 'text') && (
-          <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
-            placeholder="Jouw antwoord..."
-            className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
+          <>
+            <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
+              placeholder="Jouw antwoord..."
+              className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
+            <div className="flex justify-end mt-1">
+              <FlagBtn questionText={eq.text} questionId={qKey} answerValue={myAnswer?.value} />
+            </div>
+          </>
         )}
         {eq.type === 'parts' && (eq.parts ?? []).length > 0 && (
           <div className="space-y-3">
@@ -503,13 +509,14 @@ export default function ChapterPage() {
   }
 
   function FlagBtn({ questionText, questionId, answerValue }: { questionText: string; questionId: string; answerValue?: string }) {
+    if (isGuest || !session) return null
     return (
       <button
         onClick={() => { setFlagPopup({ questionText, questionId, answerValue }); setFlagNote(''); setFlagSent(false) }}
         title="Stuur door naar begeleider"
-        className="shrink-0 mt-0.5 text-xs text-stone-300 hover:text-indigo-500 transition-colors px-1"
+        className="shrink-0 text-[10px] text-stone-300 hover:text-indigo-500 transition-colors flex items-center gap-0.5 mt-1"
       >
-        ↗
+        <span>↱</span><span className="font-medium">bg</span>
       </button>
     )
   }
