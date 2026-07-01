@@ -3,11 +3,11 @@ export async function sendEmail({ to, subject, html }: {
   subject: string
   html: string
 }): Promise<boolean> {
-  const apiKey = process.env.SMTP_PASS
+  const apiKey = process.env.BREVO_API_KEY ?? process.env.SMTP_PASS
   const fromRaw = process.env.SMTP_FROM ?? 'Huwelijkscursus <admin@huwelijkscursus.online>'
 
   if (!apiKey) {
-    console.error('SMTP_PASS (Brevo API key) not set')
+    console.error('BREVO_API_KEY not set')
     return false
   }
 
