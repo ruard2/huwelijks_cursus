@@ -1,43 +1,43 @@
-import nodemailer from 'nodemailer'
-
-// Transip SMTP — set these in Railway environment variables:
-//   SMTP_HOST  = smtp.transip.email
-//   SMTP_PORT  = 587
-//   SMTP_USER  = admin@huwelijkscursus.online
-//   SMTP_PASS  = <e-mailwachtwoord>
-//   SMTP_FROM  = Huwelijkscursus <admin@huwelijkscursus.online>
-
 export async function sendEmail({ to, subject, html }: {
   to: string
   subject: string
   html: string
 }): Promise<boolean> {
-  const host = process.env.SMTP_HOST
-  const user = process.env.SMTP_USER
-  const pass = process.env.SMTP_PASS
-  if (!host || !user || !pass) {
-    console.error('SMTP_HOST / SMTP_USER / SMTP_PASS not set')
+  const apiKey = process.env.SMTP_PASS
+  const fromRaw = process.env.SMTP_FROM ?? 'Huwelijkscursus <admin@huwelijkscursus.online>'
+
+  if (!apiKey) {
+    console.error('SMTP_PASS (Brevo API key) not set')
     return false
   }
 
-  const port = parseInt(process.env.SMTP_PORT ?? '587', 10)
-  const from = process.env.SMTP_FROM ?? `Huwelijkscursus <${user}>`
-
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-    connectionTimeout: 8000,
-    greetingTimeout: 5000,
-    socketTimeout: 8000,
-  })
+  // Parse "Name <email>" or just "email"
+  const match = fromRaw.match(/^(.+?)\s*<(.+?)>$/)
+  const senderName = match ? match[1].trim() : 'Huwelijkscursus'
+  const senderEmail = match ? match[2].trim() : fromRaw.trim()
 
   try {
-    await transporter.sendMail({ from, to, subject, html })
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': apiKey,
+      },
+      body: JSON.stringify({
+        sender: { name: senderName, email: senderEmail },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+      }),
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      console.error('Brevo API error:', res.status, err)
+      return false
+    }
     return true
   } catch (err) {
-    console.error('SMTP error:', err)
+    console.error('Brevo fetch error:', err)
     return false
   }
 }
