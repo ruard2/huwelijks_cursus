@@ -21,6 +21,10 @@ export function generateToken(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
+export function generateLinkToken(): string {
+  return crypto.randomBytes(32).toString('hex')
+}
+
 export function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex')
 }

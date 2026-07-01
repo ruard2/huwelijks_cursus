@@ -3,20 +3,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { setSession, getSession, setGuestMode } from '@/lib/session'
-import type { Session } from '@/lib/session'
 
 type Mode =
-  | 'choose' | 'recover'
-  | 'solo' | 'create' | 'join' | 'join-pin'
-  | 'verify-email' | 'set-pin'
+  | 'choose'
+  | 'login' | 'register' | 'register-sent'
   | 'forgot-code' | 'forgot-code-sent'
-  | 'forgot-pin' | 'reset-pin'
   | 'begeleider-choose' | 'register-begeleider' | 'begeleider-verify'
   | 'begeleider-login' | 'begeleider-forgot-pin' | 'begeleider-reset-pin'
-
-function stripTitle(name: string) {
-  return name.replace(/^(ds\.?|dr\.?|drs\.?|prof\.?|ir\.?|mr\.?)\s+/i, '').trim()
-}
 
 function PinInput({ value, onChange, placeholder = '• • • •', autoFocus = false }: {
   value: string; onChange: (v: string) => void; placeholder?: string; autoFocus?: boolean
@@ -82,184 +75,68 @@ export default function LandingPage() {
   const [confirmPin, setConfirmPin] = useState('')
   const [resetToken, setResetToken] = useState('')
   const [begeleiderName, setBegeleiderName] = useState('')
+  const [partnerCode, setPartnerCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
-  const [maskedEmail, setMaskedEmail] = useState('')
-  const [registeredBegeleider, setRegisteredBegeleider] = useState('')
-  const [shareMsg, setShareMsg] = useState('')
-  const [pendingSession, setPendingSession] = useState<Partial<Session> & { coupleCode: string } | null>(null)
+  const [registeredEmail, setRegisteredEmail] = useState('')
 
   useEffect(() => {
     if (getSession()) router.replace('/home')
   }, [router])
 
-  function back() { setMode('choose'); setError(''); setPin(''); setNewPin(''); setConfirmPin(''); setResetToken('') }
+  function back() { setMode('choose'); setError('') }
   function backToBegeleider() { setMode('begeleider-choose'); setError(''); setPin(''); setNewPin(''); setConfirmPin(''); setResetToken('') }
   const inputCls = 'w-full px-4 py-3 border border-stone-200 rounded-xl text-base bg-white focus:outline-none focus:ring-2 focus:ring-stone-400'
 
-  async function checkIsBegeleider(memberName: string): Promise<boolean> {
-    try {
-      const res = await fetch(`/api/begeleiders?exact=${encodeURIComponent(memberName)}`)
-      return res.ok && (await res.json()).isBegeleider === true
-    } catch { return false }
-  }
-
-  function finishLogin(data: { coupleId: string; coupleCode: string; memberId: string; memberName: string; hasPin?: boolean; isSingle?: boolean }, isBegeleider: boolean, bg: string) {
-    setSession({
-      memberId: data.memberId,
-      memberName: data.memberName,
-      coupleId: data.coupleId,
-      coupleCode: data.coupleCode,
-      isSingle: data.isSingle ?? false,
-      begeleiderName: bg,
-      isBegeleider,
-    })
-    router.push('/intro')
-  }
-
-  // ── SOLO ──────────────────────────────────────────────────────────────
-  async function handleSolo() {
-    if (!name.trim()) return setError('Vul je naam in')
+  // ── LOGIN ────────────────────────────────────────────────────────────────
+  async function handleLogin() {
+    if (!code.trim() || !name.trim()) return setError('Vul koppelcode en naam in')
     setLoading(true); setError('')
     try {
-      const res = await fetch('/api/couple/create', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email }),
-      })
-      const data = await res.json()
-      if (!res.ok) return setError(data.error)
-      const pending = { ...data, isSingle: true, begeleiderName: 'Ruard Stolper' }
-      setPendingSession(pending)
-      if (data.emailSent) {
-        setResetToken('')
-        setMode('verify-email')
-      } else {
-        setPin(''); setNewPin(''); setConfirmPin('')
-        setMode('set-pin')
-      }
-    } catch { setError('Er ging iets mis. Probeer het opnieuw.') }
-    finally { setLoading(false) }
-  }
-
-  // ── CREATE ────────────────────────────────────────────────────────────
-  async function handleCreate() {
-    if (!name.trim()) return setError('Vul je naam in')
-    setLoading(true); setError('')
-    try {
-      const res = await fetch('/api/couple/create', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email }),
+        body: JSON.stringify({ code: code.trim().toUpperCase(), name: name.trim() }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
-      const bg = begeleiderName.trim() || 'Ruard Stolper'
-      await fetch('/api/couples', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ coupleCode: data.coupleCode, begeleiderName: bg }),
+      setSession({
+        memberId: data.memberId,
+        memberName: data.memberName,
+        coupleId: data.coupleId,
+        coupleCode: data.coupleCode,
+        isSingle: false,
+        begeleiderName: data.begeleiderName ?? 'Ruard Stolper',
+        isBegeleider: false,
       })
-      const pending = { ...data, isSingle: false, begeleiderName: bg }
-      setPendingSession(pending)
-      if (data.emailSent) {
-        setResetToken('')
-        setMode('verify-email')
-      } else {
-        setPin(''); setNewPin(''); setConfirmPin('')
-        setMode('set-pin')
-      }
+      router.push('/home')
     } catch { setError('Er ging iets mis. Probeer het opnieuw.') }
     finally { setLoading(false) }
   }
 
-  // ── VERIFY EMAIL (after create/solo with email) ───────────────────────
-  async function handleVerifyEmail(skip = false) {
-    if (!pendingSession) return
-    if (!skip) {
-      if (!resetToken.trim() || resetToken.length < 6) return setError('Voer de 6-cijferige code in')
-      setLoading(true); setError('')
-      try {
-        const res = await fetch('/api/auth/verify-email', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ coupleCode: pendingSession.coupleCode, token: resetToken.trim() }),
-        })
-        const data = await res.json()
-        if (!res.ok) { setError(data.error); return }
-      } catch { setError('Er ging iets mis.'); return }
-      finally { setLoading(false) }
-    }
-    setResetToken(''); setNewPin(''); setConfirmPin('')
-    setMode('set-pin')
-  }
-
-  // ── JOIN ──────────────────────────────────────────────────────────────
-  async function handleJoin(withPin?: string) {
-    if (!name.trim() || !code.trim()) return setError('Vul naam en code in')
+  // ── REGISTER ─────────────────────────────────────────────────────────────
+  async function handleRegister() {
+    if (!name.trim()) return setError('Vul je naam in')
+    if (!email.trim()) return setError('Vul je e-mailadres in')
     setLoading(true); setError('')
     try {
-      const res = await fetch('/api/couple/join', {
+      const res = await fetch('/api/auth/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, code, pin: withPin }),
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          partnerCode: partnerCode.trim() || undefined,
+          begeleiderName: begeleiderName.trim() || undefined,
+        }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
-
-      if (data.pinRequired) {
-        setPin(''); setMode('join-pin'); return
-      }
-
-      const [coupleData, isBegeleider] = await Promise.all([
-        fetch(`/api/couples?code=${data.coupleCode}`).then(r => r.ok ? r.json() as Promise<{ couple?: { begeleiderName?: string } }> : Promise.resolve({})),
-        checkIsBegeleider(name.trim()),
-      ])
-      const bg = (coupleData as { couple?: { begeleiderName?: string } }).couple?.begeleiderName ?? 'Ruard Stolper'
-
-      if (!data.hasPin) {
-        // New member or member without PIN — offer set-pin
-        setPendingSession({ ...data, isSingle: false, begeleiderName: bg, isBegeleider })
-        setPin(''); setNewPin(''); setConfirmPin('')
-        setMode('set-pin')
-      } else {
-        finishLogin(data, isBegeleider, bg)
-      }
+      setRegisteredEmail(email.trim())
+      setMode('register-sent')
     } catch { setError('Er ging iets mis. Probeer het opnieuw.') }
     finally { setLoading(false) }
   }
 
-  // ── SET PIN (after create/join) ───────────────────────────────────────
-  async function handleSetPin(skip = false) {
-    if (!pendingSession) return
-    if (!skip) {
-      if (!newPin) return setError('Voer een PIN in')
-      if (newPin !== confirmPin) return setError('PINs komen niet overeen')
-      if (newPin.length < 4) return setError('PIN moet minimaal 4 cijfers zijn')
-    }
-
-    setLoading(true); setError('')
-    try {
-      if (!skip && newPin && pendingSession.memberId) {
-        await fetch('/api/member/pin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-member-id': pendingSession.memberId },
-          body: JSON.stringify({ newPin }),
-        })
-      }
-      const isBegeleider = pendingSession.isBegeleider ?? await checkIsBegeleider(pendingSession.memberName ?? '')
-      finishLogin(
-        { coupleId: pendingSession.coupleId!, coupleCode: pendingSession.coupleCode, memberId: pendingSession.memberId!, memberName: pendingSession.memberName!, hasPin: !skip && !!newPin },
-        isBegeleider,
-        pendingSession.begeleiderName ?? 'Ruard Stolper',
-      )
-    } catch { setError('Er ging iets mis.') }
-    finally { setLoading(false) }
-  }
-
-  function copyCode() {
-    if (!pendingSession?.coupleCode) return
-    navigator.clipboard.writeText(pendingSession.coupleCode).catch(() => {})
-    setCopied(true); setTimeout(() => setCopied(false), 2000)
-  }
-
-  // ── FORGOT CODE ───────────────────────────────────────────────────────
+  // ── FORGOT CODE ───────────────────────────────────────────────────────────
   async function handleForgotCode() {
     if (!email.trim()) return setError('Vul je e-mailadres in')
     setLoading(true); setError('')
@@ -273,48 +150,7 @@ export default function LandingPage() {
     finally { setLoading(false) }
   }
 
-  // ── FORGOT PIN ────────────────────────────────────────────────────────
-  async function handleForgotPin() {
-    if (!code.trim() || !name.trim()) return setError('Vul koppelcode en naam in')
-    setLoading(true); setError('')
-    try {
-      const res = await fetch('/api/auth/forgot-pin', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: code.toUpperCase(), name }),
-      })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error); return }
-      setMaskedEmail(data.email ?? '')
-      setResetToken('')
-      setNewPin('')
-      setConfirmPin('')
-      setMode('reset-pin')
-    } catch { setError('Er ging iets mis.') }
-    finally { setLoading(false) }
-  }
-
-  // ── RESET PIN ─────────────────────────────────────────────────────────
-  async function handleResetPin() {
-    if (!resetToken.trim()) return setError('Vul de 6-cijferige code in')
-    if (!newPin || newPin.length < 4) return setError('PIN moet minimaal 4 cijfers zijn')
-    if (newPin !== confirmPin) return setError('PINs komen niet overeen')
-    setLoading(true); setError('')
-    try {
-      const res = await fetch('/api/auth/reset-pin', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: code.toUpperCase(), name, token: resetToken, newPin }),
-      })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error); return }
-      const isBegeleider = await checkIsBegeleider(name.trim())
-      const coupleData = await fetch(`/api/couples?code=${data.coupleCode}`).then(r => r.ok ? r.json() as Promise<{ couple?: { begeleiderName?: string } }> : Promise.resolve({}))
-      const bg = (coupleData as { couple?: { begeleiderName?: string } }).couple?.begeleiderName ?? 'Ruard Stolper'
-      finishLogin(data, isBegeleider, bg)
-    } catch { setError('Er ging iets mis.') }
-    finally { setLoading(false) }
-  }
-
-  // ── BEGELEIDER REGISTER ───────────────────────────────────────────────
+  // ── BEGELEIDER REGISTER ───────────────────────────────────────────────────
   async function handleBegeleiderRegister() {
     if (!name.trim()) return setError('Vul je naam in')
     if (!email.trim()) return setError('Vul je e-mailadres in')
@@ -332,7 +168,7 @@ export default function LandingPage() {
     finally { setLoading(false) }
   }
 
-  // ── BEGELEIDER VERIFY ─────────────────────────────────────────────────
+  // ── BEGELEIDER VERIFY ─────────────────────────────────────────────────────
   async function handleBegeleiderVerify() {
     if (!resetToken.trim()) return setError('Voer de 6-cijferige code in')
     if (!newPin || newPin.length < 4) return setError('PIN moet minimaal 4 cijfers zijn')
@@ -351,7 +187,7 @@ export default function LandingPage() {
     finally { setLoading(false) }
   }
 
-  // ── BEGELEIDER LOGIN ──────────────────────────────────────────────────
+  // ── BEGELEIDER LOGIN ──────────────────────────────────────────────────────
   async function handleBegeleiderLogin() {
     if (!name.trim() || !pin.trim()) return setError('Vul naam en PIN in')
     setLoading(true); setError('')
@@ -368,7 +204,7 @@ export default function LandingPage() {
     finally { setLoading(false) }
   }
 
-  // ── BEGELEIDER FORGOT PIN ─────────────────────────────────────────────
+  // ── BEGELEIDER FORGOT PIN ─────────────────────────────────────────────────
   async function handleBegeleiderForgotPin() {
     if (!email.trim()) return setError('Vul je e-mailadres in')
     setLoading(true); setError('')
@@ -383,7 +219,7 @@ export default function LandingPage() {
     finally { setLoading(false) }
   }
 
-  // ── BEGELEIDER RESET PIN ──────────────────────────────────────────────
+  // ── BEGELEIDER RESET PIN ──────────────────────────────────────────────────
   async function handleBegeleiderResetPin() {
     if (!resetToken.trim()) return setError('Voer de 6-cijferige code in')
     if (!newPin || newPin.length < 4) return setError('PIN moet minimaal 4 cijfers zijn')
@@ -402,7 +238,7 @@ export default function LandingPage() {
     finally { setLoading(false) }
   }
 
-  // ── RENDER ────────────────────────────────────────────────────────────
+  // ── RENDER ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 bg-stone-50">
       <div className="w-full max-w-sm">
@@ -415,150 +251,36 @@ export default function LandingPage() {
         {/* ── CHOOSE ── */}
         {mode === 'choose' && (
           <div className="space-y-3">
-            <button onClick={() => setMode('solo')}
-              className="w-full text-left bg-white border border-stone-200 rounded-2xl p-5 active:scale-95 transition-transform">
-              <p className="font-bold text-stone-900 text-base">Persoonlijke verkenning</p>
-              <p className="text-stone-500 text-sm mt-1 leading-snug">Alleen doen, in eigen tempo. Antwoorden opgeslagen.</p>
-            </button>
-            <button onClick={() => setMode('create')}
+            <button onClick={() => { setMode('login'); setCode(''); setName(''); setError('') }}
               className="w-full text-left bg-stone-900 text-white rounded-2xl p-5 active:scale-95 transition-transform">
-              <p className="font-bold text-base">Samen als koppel starten</p>
-              <p className="text-stone-300 text-sm mt-1 leading-snug">Maak een gedeelde ruimte aan — jullie zien elkaars antwoorden live.</p>
+              <p className="font-bold text-base">Inloggen</p>
+              <p className="text-stone-300 text-sm mt-1 leading-snug">Voer je koppelcode en naam in.</p>
             </button>
-            <button onClick={() => setMode('join')}
+            <button onClick={() => { setMode('register'); setName(''); setEmail(''); setPartnerCode(''); setBegeleiderName(''); setError('') }}
               className="w-full text-left bg-white border border-stone-200 rounded-2xl p-5 active:scale-95 transition-transform">
-              <p className="font-bold text-stone-900 text-base">Deelnemen met koppelcode</p>
-              <p className="text-stone-500 text-sm mt-1 leading-snug">Je partner heeft al een ruimte aangemaakt.</p>
+              <p className="font-bold text-stone-900 text-base">Registreren</p>
+              <p className="text-stone-500 text-sm mt-1 leading-snug">Maak een account aan met je e-mailadres.</p>
             </button>
             <button onClick={() => { setMode('begeleider-choose'); setName(''); setEmail(''); setPin(''); setError('') }}
               className="w-full text-left bg-white border border-dashed border-stone-300 rounded-2xl p-4 active:scale-95 transition-transform">
               <p className="font-semibold text-stone-600 text-sm">Ben je begeleider?</p>
               <p className="text-stone-400 text-xs mt-0.5">Registreer of log in als begeleider.</p>
             </button>
-            <button onClick={() => { setMode('recover'); setError('') }}
-              className="w-full text-center text-xs text-stone-400 py-2 hover:text-stone-600 transition-colors">
-              Koppelcode of PIN vergeten?
-            </button>
-            <button onClick={() => { setGuestMode(); router.push('/home') }}
-              className="w-full text-center text-xs text-stone-400 py-1 hover:text-stone-600 transition-colors">
-              Bekijk de cursus zonder account →
-            </button>
+            <div className="pt-1 space-y-1">
+              <button onClick={() => { setMode('forgot-code'); setEmail(''); setError('') }}
+                className="w-full text-center text-xs text-stone-400 py-1 hover:text-stone-600 transition-colors">
+                Koppelcode vergeten?
+              </button>
+              <button onClick={() => { setGuestMode(); router.push('/home') }}
+                className="w-full text-center text-xs text-stone-400 py-1 hover:text-stone-600 transition-colors">
+                Bekijk de cursus zonder account →
+              </button>
+            </div>
           </div>
         )}
 
-        {/* ── RECOVER ── */}
-        {mode === 'recover' && (
-          <div className="space-y-3">
-            <button onClick={() => { setMode('choose'); setError('') }} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
-            <div className="bg-stone-100 rounded-2xl p-4 mb-1">
-              <p className="text-sm font-semibold text-stone-700 mb-1">Wat wil je herstellen?</p>
-              <p className="text-xs text-stone-500 leading-relaxed">Kies hieronder wat je kwijt bent. We sturen een herstelcode naar het e-mailadres dat bij je account is opgeslagen.</p>
-            </div>
-            <button onClick={() => { setMode('forgot-code'); setEmail(''); setError('') }}
-              className="w-full text-left bg-white border border-stone-200 rounded-2xl p-5 active:scale-95 transition-transform">
-              <p className="font-bold text-stone-900 text-base">Koppelcode vergeten</p>
-              <p className="text-stone-500 text-sm mt-1 leading-snug">We sturen je koppelcode naar je e-mailadres.</p>
-            </button>
-            <button onClick={() => { setMode('forgot-pin'); setCode(''); setName(''); setError('') }}
-              className="w-full text-left bg-white border border-stone-200 rounded-2xl p-5 active:scale-95 transition-transform">
-              <p className="font-bold text-stone-900 text-base">PIN vergeten</p>
-              <p className="text-stone-500 text-sm mt-1 leading-snug">Stel een nieuwe PIN in via je koppelcode en e-mail.</p>
-            </button>
-          </div>
-        )}
-
-        {/* ── VERIFY EMAIL ── */}
-        {mode === 'verify-email' && pendingSession && (
-          <div className="space-y-4">
-            <div className="text-center pt-2">
-              <p className="text-2xl mb-2">📬</p>
-              <p className="font-bold text-stone-900">Bevestig je e-mailadres</p>
-              <p className="text-sm text-stone-500 mt-1 leading-relaxed">
-                We hebben een 6-cijferige code gestuurd naar <strong>{email}</strong>. Voer hem hieronder in.
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl border-2 border-stone-900 overflow-hidden">
-              <div className="bg-stone-900 px-4 py-3">
-                <p className="text-white font-bold text-sm">Jouw koppelcode — sla op!</p>
-              </div>
-              <div className="px-4 py-3 flex items-center justify-between gap-3">
-                <p className="font-mono text-2xl font-bold tracking-widest text-stone-900">{pendingSession.coupleCode}</p>
-                <button onClick={copyCode}
-                  className={`text-xs px-3 py-1.5 rounded-xl font-semibold transition-colors ${copied ? 'bg-green-100 text-green-700' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>
-                  {copied ? '✓ Gekopieerd' : 'Kopieer'}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Code uit e-mail</label>
-              <input type="text" inputMode="numeric" maxLength={6} value={resetToken}
-                onChange={e => setResetToken(e.target.value.replace(/\D/g, ''))}
-                placeholder="123456" className={`${inputCls} tracking-widest text-center`} autoFocus />
-            </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={() => handleVerifyEmail(false)} disabled={loading || resetToken.length < 6}
-              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50 active:scale-95 transition-transform">
-              {loading ? 'Bezig...' : 'Bevestigen →'}
-            </button>
-            <button onClick={() => handleVerifyEmail(true)}
-              className="w-full text-center text-xs text-stone-400 py-1">
-              Overslaan (e-mail later bevestigen)
-            </button>
-          </div>
-        )}
-
-        {/* ── SOLO ── */}
-        {mode === 'solo' && (
-          <div className="space-y-4">
-            <button onClick={back} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
-            <div className="bg-stone-100 rounded-2xl p-4">
-              <p className="text-sm text-stone-600 leading-relaxed">Je werkt alleen. Gezamenlijke gespreksonderwerpen sla je over.</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Jouw naam</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Bijv. Sarah" className={inputCls} autoFocus />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">E-mailadres <span className="text-stone-400 font-normal">(voor herstel)</span></label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="jouw@email.nl" className={inputCls} />
-            </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={handleSolo} disabled={loading}
-              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50 active:scale-95 transition-transform">
-              {loading ? 'Bezig...' : 'Begin →'}
-            </button>
-          </div>
-        )}
-
-        {/* ── CREATE ── */}
-        {mode === 'create' && (
-          <div className="space-y-4">
-            <button onClick={back} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Jouw naam</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Bijv. Sarah" className={inputCls} autoFocus />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">E-mailadres <span className="text-stone-400 font-normal">(voor herstel koppelcode/PIN)</span></label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="jouw@email.nl" className={inputCls} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Begeleider</label>
-              <BegeleiderSearch value={begeleiderName} onChange={setBegeleiderName} />
-              <p className="text-xs text-stone-400 mt-1">Laat leeg voor Ruard Stolper</p>
-            </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={handleCreate} disabled={loading}
-              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50 active:scale-95 transition-transform">
-              {loading ? 'Bezig...' : 'Koppelcode aanmaken →'}
-            </button>
-          </div>
-        )}
-
-        {/* ── JOIN ── */}
-        {mode === 'join' && (
+        {/* ── LOGIN ── */}
+        {mode === 'login' && (
           <div className="space-y-4">
             <button onClick={back} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
             <div>
@@ -569,13 +291,13 @@ export default function LandingPage() {
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1">Jouw naam</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleJoin()}
-                placeholder="Bijv. Ruard" className={inputCls} />
+                onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                placeholder="Bijv. Sarah" className={inputCls} />
             </div>
             {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={() => handleJoin()} disabled={loading}
+            <button onClick={handleLogin} disabled={loading}
               className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50 active:scale-95 transition-transform">
-              {loading ? 'Bezig...' : 'Deelnemen →'}
+              {loading ? 'Bezig...' : 'Inloggen →'}
             </button>
             <button onClick={() => { setMode('forgot-code'); setEmail(''); setError('') }}
               className="w-full text-center text-xs text-stone-400 py-1">
@@ -584,89 +306,81 @@ export default function LandingPage() {
           </div>
         )}
 
-        {/* ── JOIN-PIN ── */}
-        {mode === 'join-pin' && (
+        {/* ── REGISTER ── */}
+        {mode === 'register' && (
           <div className="space-y-4">
-            <div className="text-center pt-2">
-              <p className="text-2xl mb-2">🔒</p>
-              <p className="font-bold text-stone-900">PIN invoeren</p>
-              <p className="text-sm text-stone-500 mt-1">Welkom terug, {name}</p>
+            <button onClick={back} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Jouw naam</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)}
+                placeholder="Bijv. Sarah" className={inputCls} autoFocus />
             </div>
-            <PinInput value={pin} onChange={setPin} autoFocus />
-            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-            <button onClick={() => handleJoin(pin)} disabled={loading || !pin}
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">E-mailadres</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="jouw@email.nl" className={inputCls} />
+              <p className="text-xs text-stone-400 mt-1">We sturen je een bevestigingslink.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">
+                Koppelcode partner <span className="text-stone-400 font-normal">(optioneel)</span>
+              </label>
+              <input type="text" value={partnerCode} onChange={e => setPartnerCode(e.target.value.toUpperCase())}
+                placeholder="Bijv. TROUW-4821 — laat leeg als je zelf start"
+                className={`${inputCls} tracking-widest`} />
+              <p className="text-xs text-stone-400 mt-1">Heeft je partner al een code? Vul die hier in.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">
+                Begeleider <span className="text-stone-400 font-normal">(optioneel)</span>
+              </label>
+              <BegeleiderSearch value={begeleiderName} onChange={setBegeleiderName} />
+              <p className="text-xs text-stone-400 mt-1">Laat leeg voor Ruard Stolper</p>
+            </div>
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <button onClick={handleRegister} disabled={loading}
               className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50 active:scale-95 transition-transform">
-              {loading ? 'Bezig...' : 'Inloggen →'}
-            </button>
-            <button onClick={() => { setMode('forgot-pin'); setPin(''); setError('') }}
-              className="w-full text-center text-xs text-stone-400 py-1">
-              PIN vergeten?
-            </button>
-            <button onClick={() => { setMode('join'); setError('') }}
-              className="w-full text-center text-xs text-stone-400 py-1">
-              ← Andere naam of code
+              {loading ? 'Bezig...' : 'Bevestigingslink versturen →'}
             </button>
           </div>
         )}
 
-        {/* ── SET-PIN (after create/join) ── */}
-        {mode === 'set-pin' && pendingSession && (
-          <div className="space-y-4">
-            {/* Couple code — save this! */}
-            <div className="bg-white rounded-2xl border-2 border-stone-900 overflow-hidden">
-              <div className="bg-stone-900 px-4 py-3">
-                <p className="text-white font-bold text-sm">Jouw koppelcode</p>
-                <p className="text-stone-400 text-xs mt-0.5">Sla dit goed op — je hebt hem nodig om opnieuw in te loggen.</p>
-              </div>
-              <div className="px-4 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-mono text-2xl font-bold tracking-widest text-stone-900">{pendingSession.coupleCode}</p>
-                  <button onClick={copyCode}
-                    className={`text-xs px-3 py-1.5 rounded-xl font-semibold transition-colors ${copied ? 'bg-green-100 text-green-700' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>
-                    {copied ? '✓ Gekopieerd' : 'Kopieer'}
-                  </button>
-                </div>
-                <div className="mt-3 bg-amber-50 rounded-xl px-3 py-2.5 border border-amber-100">
-                  <p className="text-xs text-amber-800 leading-relaxed">
-                    ⚠️ Bewaar deze code in je notities, foto of wachtwoordmanager. Zonder code kun je niet meer inloggen op een nieuw apparaat.
-                  </p>
-                </div>
-              </div>
+        {/* ── REGISTER SENT ── */}
+        {mode === 'register-sent' && (
+          <div className="text-center space-y-5">
+            <div className="text-5xl">📬</div>
+            <div>
+              <p className="font-bold text-stone-900 text-xl">Check je e-mail</p>
+              <p className="text-stone-500 text-sm mt-2 leading-relaxed">
+                We hebben een bevestigingslink gestuurd naar<br />
+                <strong className="text-stone-700">{registeredEmail}</strong>
+              </p>
             </div>
-
-            {/* Optional PIN */}
-            <div className="bg-white rounded-2xl border border-stone-100 p-4">
-              <p className="text-sm font-semibold text-stone-900 mb-1">PIN instellen <span className="text-stone-400 font-normal text-xs">(optioneel)</span></p>
-              <p className="text-xs text-stone-400 mb-3 leading-relaxed">Bescherm je antwoorden met een PIN. Handig als je een gedeeld apparaat gebruikt.</p>
-              <div className="space-y-2">
-                <PinInput value={newPin} onChange={setNewPin} placeholder="Nieuwe PIN (min. 4 cijfers)" />
-                {newPin.length >= 4 && (
-                  <PinInput value={confirmPin} onChange={setConfirmPin} placeholder="Herhaal PIN" />
-                )}
-              </div>
+            <div className="bg-stone-100 rounded-2xl p-4 text-left">
+              <p className="text-sm text-stone-600 leading-relaxed">
+                Klik op de link in de e-mail om direct in te loggen. De link is 24 uur geldig.
+              </p>
             </div>
-
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={() => handleSetPin(false)} disabled={loading}
-              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50 active:scale-95 transition-transform">
-              {loading ? 'Bezig...' : newPin ? 'PIN instellen & beginnen →' : 'Beginnen →'}
+            <button onClick={back}
+              className="w-full py-3 text-stone-500 text-sm border border-stone-200 rounded-2xl bg-white">
+              Terug naar begin
             </button>
-            {newPin === '' && (
-              <button onClick={() => handleSetPin(true)} disabled={loading}
-                className="w-full py-2 text-stone-400 text-sm">
-                Overslaan (geen PIN)
-              </button>
-            )}
+            <button onClick={() => { setMode('register'); setError('') }}
+              className="w-full text-center text-xs text-stone-400 py-1">
+              Geen e-mail ontvangen? Opnieuw versturen
+            </button>
           </div>
         )}
 
         {/* ── FORGOT CODE ── */}
         {mode === 'forgot-code' && (
           <div className="space-y-4">
-            <button onClick={() => { setMode('recover'); setError('') }} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
+            <button onClick={back} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
             <div>
               <p className="font-bold text-stone-900 mb-1">Koppelcode vergeten?</p>
-              <p className="text-sm text-stone-500 mb-4 leading-relaxed">Voer het e-mailadres in dat bij het aanmaken is opgegeven. Dan sturen we je de code toe.</p>
+              <p className="text-sm text-stone-500 mb-4 leading-relaxed">
+                Voer het e-mailadres in dat je bij registratie hebt gebruikt. We sturen je de code toe.
+              </p>
               <label className="block text-sm font-medium text-stone-700 mb-1">E-mailadres</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleForgotCode()}
@@ -680,82 +394,17 @@ export default function LandingPage() {
           </div>
         )}
 
+        {/* ── FORGOT CODE SENT ── */}
         {mode === 'forgot-code-sent' && (
           <div className="text-center space-y-4">
             <div className="text-4xl">📬</div>
             <p className="font-bold text-stone-900">E-mail verstuurd</p>
             <p className="text-sm text-stone-500 leading-relaxed">
-              Als er een account gekoppeld is aan <strong>{email}</strong>, ontvang je de koppelcode binnen een paar minuten.
+              Als <strong>{email}</strong> bij een account hoort, ontvang je de koppelcode binnen een paar minuten.
             </p>
-            <button onClick={() => { setMode('join'); setError(''); setEmail('') }}
+            <button onClick={() => { setMode('login'); setCode(''); setName(''); setError('') }}
               className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base">
               Inloggen met koppelcode
-            </button>
-          </div>
-        )}
-
-        {/* ── FORGOT PIN ── */}
-        {mode === 'forgot-pin' && (
-          <div className="space-y-4">
-            <button onClick={() => { setMode('recover'); setError('') }} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
-            <div>
-              <p className="font-bold text-stone-900 mb-1">PIN vergeten?</p>
-              <p className="text-sm text-stone-500 mb-4 leading-relaxed">
-                We sturen een resetcode naar het e-mailadres dat bij de koppelcode hoort.
-              </p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Koppelcode</label>
-              <input type="text" value={code} onChange={e => setCode(e.target.value.toUpperCase())}
-                placeholder="Bijv. TROUW-4821" className={`${inputCls} tracking-widest`} autoFocus />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Jouw naam</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleForgotPin()}
-                placeholder="Bijv. Sarah" className={inputCls} />
-            </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={handleForgotPin} disabled={loading}
-              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50">
-              {loading ? 'Bezig...' : 'Resetcode opsturen →'}
-            </button>
-          </div>
-        )}
-
-        {/* ── RESET PIN ── */}
-        {mode === 'reset-pin' && (
-          <div className="space-y-4">
-            <div>
-              <p className="font-bold text-stone-900 mb-1">Nieuwe PIN instellen</p>
-              <p className="text-sm text-stone-500 mb-4 leading-relaxed">
-                We hebben een 6-cijferige code gestuurd naar <strong>{maskedEmail}</strong>. Voer hem hieronder in.
-              </p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Code uit e-mail</label>
-              <input type="text" inputMode="numeric" maxLength={6} value={resetToken}
-                onChange={e => setResetToken(e.target.value.replace(/\D/g, ''))}
-                placeholder="123456" className={`${inputCls} tracking-widest text-center`} autoFocus />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Nieuwe PIN</label>
-              <PinInput value={newPin} onChange={setNewPin} />
-            </div>
-            {newPin.length >= 4 && (
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">Herhaal PIN</label>
-                <PinInput value={confirmPin} onChange={setConfirmPin} />
-              </div>
-            )}
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={handleResetPin} disabled={loading || !resetToken || !newPin}
-              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50">
-              {loading ? 'Bezig...' : 'PIN instellen & inloggen →'}
-            </button>
-            <button onClick={() => { setMode('forgot-pin'); setError('') }}
-              className="w-full text-center text-xs text-stone-400 py-1">
-              Nieuwe code aanvragen
             </button>
           </div>
         )}
@@ -765,17 +414,17 @@ export default function LandingPage() {
           <div className="space-y-3">
             <button onClick={back} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
             <div className="bg-stone-50 rounded-2xl p-4 mb-2">
-              <p className="text-sm text-stone-600 leading-relaxed">Als begeleider kun je de cursus inhoud bekijken en stellen begeleiden. Je logt in met jouw naam en PIN.</p>
+              <p className="text-sm text-stone-600 leading-relaxed">Als begeleider kun je de cursus bekijken en stellen begeleiden. Je logt in met naam en PIN.</p>
             </div>
             <button onClick={() => { setMode('register-begeleider'); setName(''); setEmail(''); setError('') }}
               className="w-full text-left bg-stone-900 text-white rounded-2xl p-5 active:scale-95 transition-transform">
               <p className="font-bold text-base">Nieuw account aanmaken</p>
-              <p className="text-stone-300 text-sm mt-1 leading-snug">Registreer met naam, e-mail en stel een PIN in.</p>
+              <p className="text-stone-300 text-sm mt-1">Registreer met naam en e-mail.</p>
             </button>
             <button onClick={() => { setMode('begeleider-login'); setName(''); setPin(''); setError('') }}
               className="w-full text-left bg-white border border-stone-200 rounded-2xl p-5 active:scale-95 transition-transform">
               <p className="font-bold text-stone-900 text-base">Inloggen</p>
-              <p className="text-stone-500 text-sm mt-1 leading-snug">Je hebt al een begeleider-account.</p>
+              <p className="text-stone-500 text-sm mt-1">Je hebt al een begeleider-account.</p>
             </button>
           </div>
         )}
@@ -785,17 +434,15 @@ export default function LandingPage() {
           <div className="space-y-4">
             <button onClick={backToBegeleider} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
             <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Jouw naam (zoals stellen je kennen)</label>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Naam (zoals stellen je kennen)</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)}
                 placeholder="Bijv. Jan Koeman" className={inputCls} autoFocus />
-              <p className="text-xs text-stone-400 mt-1">Tip: titelprefix (ds., dr.) wordt genegeerd bij zoeken.</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1">E-mailadres</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleBegeleiderRegister()}
                 placeholder="jouw@email.nl" className={inputCls} />
-              <p className="text-xs text-stone-400 mt-1">Voor verificatie en PIN-herstel.</p>
             </div>
             {error && <p className="text-red-500 text-sm">{error}</p>}
             <button onClick={handleBegeleiderRegister} disabled={loading}
