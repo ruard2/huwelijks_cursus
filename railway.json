@@ -6,7 +6,7 @@
   },
   "deploy": {
     "startCommand": "npx prisma migrate deploy && npm start",
-    "healthcheckPath": "/api/pusher/trigger",
+    "healthcheckPath": "/api/health",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
