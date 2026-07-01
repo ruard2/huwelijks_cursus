@@ -174,7 +174,7 @@ export default function ChapterPage() {
   }, [chapterId])
 
   function handleChange(questionId: string, value: string) {
-    const isPrivate = answers[questionId]?.mine?.isPrivate ?? false
+    const isPrivate = answers[questionId]?.mine?.isPrivate ?? true
     setAnswers(prev => ({
       ...prev,
       [questionId]: { ...prev[questionId], mine: { ...(prev[questionId]?.mine ?? {}), questionId, value, isPrivate } as AnswerRecord },
@@ -338,7 +338,7 @@ export default function ChapterPage() {
       <div key={q.id} className="mb-5">
         <div className="flex items-start gap-2 mb-1">
           <p className="text-sm font-medium text-stone-700 flex-1">{qText}</p>
-          <button onClick={() => togglePrivate(qKey)} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
+          {!isGuest && <button onClick={() => togglePrivate(qKey)} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>}
         </div>
         {qHint && <p className="text-xs text-stone-400 mb-2">{qHint}</p>}
         <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
@@ -372,7 +372,7 @@ export default function ChapterPage() {
       <div key={qKey} className="mb-5">
         <div className="flex items-start gap-2 mb-1">
           <p className="text-sm font-medium text-stone-700 flex-1">{eq.text}</p>
-          <button onClick={togglePriv} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
+          {!isGuest && <button onClick={togglePriv} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>}
         </div>
         {eq.hint && <p className="text-xs text-stone-400 mb-2">{eq.hint}</p>}
         {(!eq.type || eq.type === 'text') && (
