@@ -4,10 +4,23 @@ import { isAdmin } from '@/lib/roles'
 
 export async function GET(req: NextRequest) {
   const memberName = req.headers.get('x-member-name') ?? ''
-  if (!isAdmin(memberName)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!memberName) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  if (isAdmin(memberName)) {
+    const comments = await prisma.comment.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { member: { select: { name: true } } },
+    })
+    return NextResponse.json({ comments })
   }
+
+  // Check if requester is a registered begeleider
+  const begeleider = await prisma.begeleider.findFirst({ where: { name: { equals: memberName, mode: 'insensitive' } } })
+  if (!begeleider) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  // Return only comments from couples assigned to this begeleider
   const comments = await prisma.comment.findMany({
+    where: { member: { couple: { begeleiderName: { equals: memberName, mode: 'insensitive' } } } },
     orderBy: { createdAt: 'desc' },
     include: { member: { select: { name: true } } },
   })
@@ -31,9 +44,10 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const memberName = req.headers.get('x-member-name') ?? ''
-  if (!isAdmin(memberName)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  if (!memberName) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const isAllowed = isAdmin(memberName) ||
+    !!(await prisma.begeleider.findFirst({ where: { name: { equals: memberName, mode: 'insensitive' } } }))
+  if (!isAllowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id } = await req.json()
   await prisma.comment.update({ where: { id }, data: { read: true } })
   return NextResponse.json({ ok: true })

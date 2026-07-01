@@ -47,7 +47,11 @@ export default function HomePage() {
     } else {
       setSessionData(s)
       fetchProgress(s.memberId)
-      if (isAdmin(s.memberName)) { fetchComments(s.memberName); fetchFlags('Ruard Stolper'); fetchBChanges(s.memberName) }
+      if (s.isBegeleider || isAdmin(s.memberName)) {
+        fetchComments(s.memberName)
+        fetchFlags(s.memberName)
+        if (isAdmin(s.memberName)) fetchBChanges(s.memberName)
+      }
     }
     fetch('/api/content?prefix=deel:')
       .then(r => r.json())
@@ -140,6 +144,7 @@ export default function HomePage() {
   if (!session && !isGuest) return null
 
   const admin = !isGuest && !!session && isAdmin(session.memberName)
+  const isBegeleiderView = !isGuest && !!session && (!!session.isBegeleider || admin)
   const unreadCount = comments.filter(c => !c.read).length
 
   const totalChapters = DELEN.reduce((sum, d) => sum + visibleChapters(d.id).length, 0)
@@ -185,8 +190,8 @@ export default function HomePage() {
         ))}
       </div>
 
-      {/* Admin tab bar */}
-      {admin && (
+      {/* Begeleider/Admin tab bar */}
+      {isBegeleiderView && (
         <div className="bg-white border-b border-stone-100 flex overflow-x-auto">
           <button onClick={() => setTab('home')}
             className={`flex-1 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap px-2 ${tab === 'home' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
@@ -206,18 +211,20 @@ export default function HomePage() {
               <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">{unreadCount}</span>
             )}
           </button>
-          <button onClick={() => setTab('versions')}
-            className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative whitespace-nowrap px-2 ${tab === 'versions' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
-            Versies
-            {bChanges.length > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold">{bChanges.length}</span>
-            )}
-          </button>
+          {admin && (
+            <button onClick={() => setTab('versions')}
+              className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative whitespace-nowrap px-2 ${tab === 'versions' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
+              Versies
+              {bChanges.length > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold">{bChanges.length}</span>
+              )}
+            </button>
+          )}
         </div>
       )}
 
-      {/* Flags panel (admin only) */}
-      {admin && tab === 'flags' && (
+      {/* Flags panel */}
+      {isBegeleiderView && tab === 'flags' && (
         <div className="max-w-lg mx-auto px-4 py-6">
           {flags.length === 0 ? (
             <p className="text-center text-stone-400 text-sm py-12">Nog niets doorgestuurd</p>
@@ -255,7 +262,7 @@ export default function HomePage() {
       )}
 
       {/* Versions panel (admin only) */}
-      {admin && tab === 'versions' && (
+      {admin && isBegeleiderView && tab === 'versions' && (
         <div className="max-w-lg mx-auto px-4 py-6">
           {bChanges.length === 0 ? (
             <p className="text-center text-stone-400 text-sm py-12">Geen aanpassingen van begeleiders gevonden</p>
@@ -308,8 +315,8 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Comments panel (admin only) */}
-      {admin && tab === 'comments' && (
+      {/* Comments panel */}
+      {isBegeleiderView && tab === 'comments' && (
         <div className="max-w-lg mx-auto px-4 py-6">
           {comments.length === 0 ? (
             <p className="text-center text-stone-400 text-sm py-12">Nog geen reacties</p>
@@ -348,7 +355,7 @@ export default function HomePage() {
       )}
 
       {/* Main content */}
-      {(!admin || tab === 'home') && <div className="max-w-lg mx-auto px-4">
+      {(!isBegeleiderView || tab === 'home') && <div className="max-w-lg mx-auto px-4">
         {/* Hero */}
         <div className="pt-7 pb-5">
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Huwelijkscursus</h1>

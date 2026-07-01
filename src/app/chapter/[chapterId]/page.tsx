@@ -140,7 +140,8 @@ export default function ChapterPage() {
 
   async function loadOverrides(chapId: string) {
     const s = getSession()
-    const bName = s?.isBegeleider ? encodeURIComponent(s.memberName) : ''
+    const rawBName = s?.isBegeleider ? s.memberName : (s?.begeleiderName ?? '')
+    const bName = rawBName ? encodeURIComponent(rawBName) : ''
     const url = `/api/content?prefix=ch:${chapId}:${bName ? `&begeleiderName=${bName}` : ''}`
     const res = await fetch(url)
     if (res.ok) setOverrides((await res.json()).overrides)
