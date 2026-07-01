@@ -6,6 +6,7 @@ const KEYS = {
   coupleId: 'hc_couple_id',
   coupleCode: 'hc_couple_code',
   isSingle: 'hc_is_single',
+  begeleiderName: 'hc_begeleider_name',
 } as const
 
 export interface Session {
@@ -14,6 +15,7 @@ export interface Session {
   coupleId: string
   coupleCode: string
   isSingle: boolean
+  begeleiderName?: string
 }
 
 export function getSession(): Session | null {
@@ -29,6 +31,7 @@ export function getSession(): Session | null {
     coupleId,
     coupleCode,
     isSingle: localStorage.getItem(KEYS.isSingle) === '1',
+    begeleiderName: localStorage.getItem(KEYS.begeleiderName) ?? undefined,
   }
 }
 
@@ -38,6 +41,8 @@ export function setSession(session: Session) {
   localStorage.setItem(KEYS.coupleId, session.coupleId)
   localStorage.setItem(KEYS.coupleCode, session.coupleCode)
   localStorage.setItem(KEYS.isSingle, session.isSingle ? '1' : '0')
+  if (session.begeleiderName) localStorage.setItem(KEYS.begeleiderName, session.begeleiderName)
+  else localStorage.removeItem(KEYS.begeleiderName)
 }
 
 export function clearSession() {

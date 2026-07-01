@@ -8,10 +8,31 @@ datasource db {
 }
 
 model Couple {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  begeleiderName String?
+  createdAt      DateTime @default(now())
+  members        Member[]
+}
+
+model Begeleider {
   id        String   @id @default(cuid())
-  code      String   @unique
+  name      String   @unique
   createdAt DateTime @default(now())
-  members   Member[]
+}
+
+model QuestionFlag {
+  id             String   @id @default(cuid())
+  coupleCode     String
+  memberNames    String
+  begeleiderName String
+  chapterId      String
+  questionId     String
+  questionText   String   @db.Text
+  answerValue    String?  @db.Text
+  note           String?  @db.Text
+  read           Boolean  @default(false)
+  createdAt      DateTime @default(now())
 }
 
 model Member {

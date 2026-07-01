@@ -48,6 +48,9 @@ export default function ChapterPage() {
   const [showExitDialog, setShowExitDialog] = useState(false)
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   const [followUpPopup, setFollowUpPopup] = useState<{ qKey: string; text: string } | null>(null)
+  const [flagPopup, setFlagPopup] = useState<{ questionText: string; questionId: string; answerValue?: string } | null>(null)
+  const [flagNote, setFlagNote] = useState('')
+  const [flagSent, setFlagSent] = useState(false)
   const pusherRef = useRef<InstanceType<typeof Pusher> | null>(null)
   const channelRef = useRef<Channel | null>(null)
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -302,8 +305,9 @@ export default function ChapterPage() {
 
     return (
       <div key={q.id} className="mb-5">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <p className="text-sm font-medium text-stone-700">{qText}</p>
+        <div className="flex items-start gap-2 mb-1">
+          <p className="text-sm font-medium text-stone-700 flex-1">{qText}</p>
+          <FlagBtn questionText={qText} questionId={qKey} answerValue={myAnswer?.value} />
           <button onClick={() => togglePrivate(qKey)} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
         </div>
         {qHint && <p className="text-xs text-stone-400 mb-2">{qHint}</p>}
@@ -333,8 +337,9 @@ export default function ChapterPage() {
     }
     return (
       <div key={qKey} className="mb-5">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <p className="text-sm font-medium text-stone-700">{eq.text}</p>
+        <div className="flex items-start gap-2 mb-1">
+          <p className="text-sm font-medium text-stone-700 flex-1">{eq.text}</p>
+          <FlagBtn questionText={eq.text} questionId={qKey} answerValue={myAnswer?.value} />
           <button onClick={togglePriv} className="shrink-0 mt-0.5 text-base">{isPrivate ? '🔒' : '👁'}</button>
         </div>
         {eq.hint && <p className="text-xs text-stone-400 mb-2">{eq.hint}</p>}
@@ -342,6 +347,29 @@ export default function ChapterPage() {
           <textarea value={myAnswer?.value ?? ''} onChange={e => handleChange(qKey, e.target.value)}
             placeholder="Jouw antwoord..."
             className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[80px]" />
+        )}
+        {eq.type === 'parts' && (eq.parts ?? []).length > 0 && (
+          <div className="space-y-3">
+            {(eq.parts ?? []).map(part => {
+              const partKey = `${qKey}.${part.id}`
+              const myPart = answers[partKey]?.mine
+              const partnerPart = answers[partKey]?.partner
+              return (
+                <div key={part.id}>
+                  <p className="text-xs font-semibold text-stone-500 mb-1 italic">{part.label}</p>
+                  <textarea value={myPart?.value ?? ''} onChange={e => handleChange(partKey, e.target.value)}
+                    placeholder="..."
+                    className="w-full px-4 py-2.5 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[60px]" />
+                  {partnerPart?.value && (sectionType === 'samen' || myPersonalDone) && (
+                    <div className="mt-1 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
+                      <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerPart.memberName.split(' ')[0]}</p>
+                      <p className="text-sm text-stone-700 whitespace-pre-wrap">{partnerPart.value}</p>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         )}
         {eq.type === 'meerkeuze' && (eq.options ?? []).length > 0 && (() => {
           const andersActive = myAnswer?.value?.startsWith('Anders: ') ?? false
@@ -415,6 +443,43 @@ export default function ChapterPage() {
           ) : null
         })()}
       </div>
+    )
+  }
+
+  async function sendFlag() {
+    const s = getSession()
+    if (!s || !flagPopup) return
+    const partnerEntry = Object.values(answers['personal:done'] ?? {}).find(a => a?.memberId !== s.memberId)
+    const memberNames = partnerEntry
+      ? `${s.memberName} en ${partnerEntry.memberName}`
+      : s.memberName
+    await fetch('/api/flags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        coupleCode: s.coupleCode,
+        memberNames,
+        begeleiderName: s.begeleiderName ?? 'Ruard Stolper',
+        chapterId,
+        questionId: flagPopup.questionId,
+        questionText: flagPopup.questionText,
+        answerValue: flagPopup.answerValue ?? null,
+        note: flagNote.trim() || null,
+      }),
+    })
+    setFlagSent(true)
+    setTimeout(() => { setFlagPopup(null); setFlagNote(''); setFlagSent(false) }, 1500)
+  }
+
+  function FlagBtn({ questionText, questionId, answerValue }: { questionText: string; questionId: string; answerValue?: string }) {
+    return (
+      <button
+        onClick={() => { setFlagPopup({ questionText, questionId, answerValue }); setFlagNote(''); setFlagSent(false) }}
+        title="Stuur door naar begeleider"
+        className="shrink-0 mt-0.5 text-xs text-stone-300 hover:text-indigo-500 transition-colors px-1"
+      >
+        ↗
+      </button>
     )
   }
 
@@ -775,6 +840,45 @@ export default function ChapterPage() {
           Klaar met dit hoofdstuk
         </button>
       </div>
+
+      {flagPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+            {flagSent ? (
+              <div className="text-center py-4">
+                <p className="text-2xl mb-2">✓</p>
+                <p className="font-semibold text-stone-900">Doorgestuurd</p>
+                <p className="text-sm text-stone-500 mt-1">Je begeleider krijgt dit bericht.</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 mb-1">Stuur door naar begeleider</p>
+                <p className="text-sm font-medium text-stone-800 mb-1">{flagPopup.questionText}</p>
+                {flagPopup.answerValue && (
+                  <p className="text-xs text-stone-400 italic mb-3 line-clamp-2">Jouw antwoord: {flagPopup.answerValue}</p>
+                )}
+                <textarea
+                  autoFocus
+                  value={flagNote}
+                  onChange={e => setFlagNote(e.target.value)}
+                  placeholder="Optionele opmerking voor begeleider..."
+                  className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 min-h-[80px] mb-4"
+                />
+                <div className="space-y-2">
+                  <button onClick={sendFlag}
+                    className="w-full py-3 bg-indigo-600 text-white rounded-2xl font-semibold text-sm">
+                    Stuur door ↗
+                  </button>
+                  <button onClick={() => { setFlagPopup(null); setFlagNote('') }}
+                    className="w-full py-3 bg-stone-100 text-stone-600 rounded-2xl text-sm font-medium">
+                    Annuleren
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {followUpPopup && (
         <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50 p-4">

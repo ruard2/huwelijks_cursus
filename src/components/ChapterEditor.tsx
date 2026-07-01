@@ -62,7 +62,7 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
     return d
   })
 
-  interface ExtraQ { id: string; text: string; hint: string; type?: 'text' | 'meerkeuze' | 'slider'; options?: string[]; min?: number; max?: number; followUp?: string }
+  interface ExtraQ { id: string; text: string; hint: string; type?: 'text' | 'meerkeuze' | 'slider' | 'parts'; options?: string[]; min?: number; max?: number; followUp?: string; parts?: { id: string; label: string }[] }
   interface VirtualSection { id: string; type: 'personal' | 'samen' | 'reflection' | 'personal_man' | 'personal_vrouw'; title: string; questions: ExtraQ[] }
 
   // Extra questions added by editors per section
@@ -470,9 +470,26 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                       <option value="text">Tekst</option>
                       <option value="meerkeuze">Meerkeuze</option>
                       <option value="slider">Slider</option>
+                      <option value="parts">Zinnen aanvullen</option>
                     </select>
                   </div>
                 </div>
+                {eq.type === 'parts' && (
+                  <div className="space-y-1">
+                    <label className="block text-[10px] text-stone-400 mb-0.5">Zinnen (elk apart af te maken)</label>
+                    {(eq.parts ?? []).map((part, pi) => (
+                      <div key={part.id} className="flex gap-1">
+                        <input value={part.label}
+                          onChange={e => { const p = [...(eq.parts ?? [])]; p[pi] = { ...p[pi], label: e.target.value }; updateExtraQuestion(s.id, idx, { parts: p }) }}
+                          placeholder={`"Wij verlangen dat..."`} className={inputCls} />
+                        <button type="button" onClick={() => updateExtraQuestion(s.id, idx, { parts: (eq.parts ?? []).filter((_, i) => i !== pi) })}
+                          className="w-7 h-7 rounded-full bg-red-50 text-red-400 text-sm flex items-center justify-center shrink-0">×</button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => updateExtraQuestion(s.id, idx, { parts: [...(eq.parts ?? []), { id: `p${Date.now()}`, label: '' }] })}
+                      className="text-[10px] text-stone-400 border border-dashed border-stone-200 rounded-lg px-2 py-1 hover:text-stone-600">+ Zin toevoegen</button>
+                  </div>
+                )}
                 {eq.type === 'meerkeuze' && (
                   <div className="space-y-1">
                     <label className="block text-[10px] text-stone-400 mb-0.5">Opties</label>
@@ -617,9 +634,26 @@ export default function ChapterEditor({ chapter, deelTitle, deelLetter, deelColo
                         <option value="text">Tekst</option>
                         <option value="meerkeuze">Meerkeuze</option>
                         <option value="slider">Slider</option>
+                        <option value="parts">Zinnen aanvullen</option>
                       </select>
                     </div>
                   </div>
+                  {q.type === 'parts' && (
+                    <div className="space-y-1">
+                      <label className="block text-[10px] text-stone-400 mb-0.5">Zinnen (elk apart af te maken)</label>
+                      {(q.parts ?? []).map((part, pi) => (
+                        <div key={part.id} className="flex gap-1">
+                          <input value={part.label}
+                            onChange={e => { const p = [...(q.parts ?? [])]; p[pi] = { ...p[pi], label: e.target.value }; updateVirtualQuestion(vs.id, qi, { parts: p }) }}
+                            placeholder={`"Wij verlangen dat..."`} className={inputCls} />
+                          <button type="button" onClick={() => updateVirtualQuestion(vs.id, qi, { parts: (q.parts ?? []).filter((_, i) => i !== pi) })}
+                            className="w-7 h-7 rounded-full bg-red-50 text-red-400 text-sm flex items-center justify-center shrink-0">×</button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => updateVirtualQuestion(vs.id, qi, { parts: [...(q.parts ?? []), { id: `p${Date.now()}`, label: '' }] })}
+                        className="text-[10px] text-stone-400 border border-dashed border-stone-200 rounded-lg px-2 py-1 hover:text-stone-600">+ Zin toevoegen</button>
+                    </div>
+                  )}
                   {q.type === 'meerkeuze' && (
                     <div className="space-y-1">
                       <label className="block text-[10px] text-stone-400 mb-0.5">Opties</label>

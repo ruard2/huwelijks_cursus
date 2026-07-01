@@ -28,8 +28,9 @@ export default function HomePage() {
   const [session, setSessionData] = useState<ReturnType<typeof getSession>>(null)
   const [progress, setProgress] = useState<ProgressEntry[]>([])
   const [showOrderNotice, setShowOrderNotice] = useState(false)
-  const [tab, setTab] = useState<'home' | 'comments'>('home')
+  const [tab, setTab] = useState<'home' | 'comments' | 'flags'>('home')
   const [comments, setComments] = useState<CommentEntry[]>([])
+  const [flags, setFlags] = useState<{ id: string; memberNames: string; coupleCode: string; chapterId: string; questionText: string; answerValue?: string; note?: string; read: boolean; createdAt: string }[]>([])
   const [showProfile, setShowProfile] = useState(false)
   const [deelOverrides, setDeelOverrides] = useState<Record<string, string>>({})
   const [hiddenChapters, setHiddenChapters] = useState<string[]>([])
@@ -40,7 +41,7 @@ export default function HomePage() {
     if (!s) { router.replace('/'); return }
     setSessionData(s)
     fetchProgress(s.memberId)
-    if (isAdmin(s.memberName)) fetchComments(s.memberName)
+    if (isAdmin(s.memberName)) { fetchComments(s.memberName); fetchFlags('Ruard Stolper') }
     fetch('/api/content?prefix=deel:')
       .then(r => r.json())
       .then(data => setDeelOverrides(data.overrides ?? {}))
@@ -60,6 +61,16 @@ export default function HomePage() {
       localStorage.setItem('hc_order_notice', '1')
     }
   }, [router])
+
+  async function fetchFlags(begeleiderName: string) {
+    const res = await fetch(`/api/flags?begeleiderName=${encodeURIComponent(begeleiderName)}`)
+    if (res.ok) { const data = await res.json(); setFlags(data.flags ?? []) }
+  }
+
+  async function markFlagRead(id: string) {
+    await fetch('/api/flags', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, read: true }) })
+    setFlags(prev => prev.map(f => f.id === id ? { ...f, read: true } : f))
+  }
 
   async function fetchComments(memberName: string) {
     const res = await fetch('/api/comments', { headers: { 'x-member-name': memberName } })
@@ -135,21 +146,62 @@ export default function HomePage() {
       {/* Admin tab bar */}
       {admin && (
         <div className="bg-white border-b border-stone-100 flex">
-          <button
-            onClick={() => setTab('home')}
-            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${tab === 'home' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}
-          >
+          <button onClick={() => setTab('home')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${tab === 'home' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
             Overzicht
           </button>
-          <button
-            onClick={() => setTab('comments')}
-            className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative ${tab === 'comments' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}
-          >
+          <button onClick={() => setTab('flags')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative ${tab === 'flags' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
+            Doorgestuurd
+            {flags.filter(f => !f.read).length > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-indigo-500 text-white text-[9px] font-bold">{flags.filter(f => !f.read).length}</span>
+            )}
+          </button>
+          <button onClick={() => setTab('comments')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative ${tab === 'comments' ? 'text-stone-900 border-b-2 border-stone-900' : 'text-stone-400'}`}>
             Reacties
             {unreadCount > 0 && (
               <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">{unreadCount}</span>
             )}
           </button>
+        </div>
+      )}
+
+      {/* Flags panel (admin only) */}
+      {admin && tab === 'flags' && (
+        <div className="max-w-lg mx-auto px-4 py-6">
+          {flags.length === 0 ? (
+            <p className="text-center text-stone-400 text-sm py-12">Nog niets doorgestuurd</p>
+          ) : (
+            <div className="space-y-3">
+              {flags.map(f => (
+                <div key={f.id} className={`bg-white rounded-2xl border p-4 ${f.read ? 'border-stone-100 opacity-60' : 'border-indigo-200'}`}>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <p className="text-xs font-bold text-stone-900">{f.memberNames}</p>
+                      <p className="text-[11px] text-stone-400">{new Date(f.createdAt).toLocaleDateString('nl-NL')}</p>
+                    </div>
+                    {!f.read && (
+                      <button onClick={() => markFlagRead(f.id)}
+                        className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full shrink-0">
+                        Gelezen
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-sm font-medium text-stone-800 mb-1">{f.questionText}</p>
+                  {f.answerValue && (
+                    <p className="text-xs text-stone-500 italic mb-2 bg-stone-50 rounded-lg px-3 py-1.5">"{f.answerValue}"</p>
+                  )}
+                  {f.note && (
+                    <div className="bg-indigo-50 rounded-xl px-3 py-2 border border-indigo-100">
+                      <p className="text-[10px] font-semibold text-indigo-500 mb-0.5">Opmerking</p>
+                      <p className="text-sm text-stone-700">{f.note}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
