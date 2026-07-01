@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   })
 
   if (cleanEmail && verificationToken) {
-    await sendEmail({
+    sendEmail({
       to: cleanEmail,
       subject: 'Bevestig je e-mailadres — Huwelijkscursus',
       html: `

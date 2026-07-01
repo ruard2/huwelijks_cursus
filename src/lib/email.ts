@@ -28,6 +28,9 @@ export async function sendEmail({ to, subject, html }: {
     port,
     secure: port === 465,
     auth: { user, pass },
+    connectionTimeout: 8000,
+    greetingTimeout: 5000,
+    socketTimeout: 8000,
   })
 
   try {
