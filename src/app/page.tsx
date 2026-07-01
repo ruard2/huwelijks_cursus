@@ -6,11 +6,11 @@ import { setSession, getSession, setGuestMode } from '@/lib/session'
 import type { Session } from '@/lib/session'
 
 type Mode =
-  | 'choose'
+  | 'choose' | 'recover'
   | 'solo' | 'create' | 'join' | 'join-pin'
-  | 'set-pin'
+  | 'verify-email' | 'set-pin'
   | 'forgot-code' | 'forgot-code-sent'
-  | 'forgot-pin' | 'pin-reset-sent' | 'reset-pin'
+  | 'forgot-pin' | 'reset-pin'
   | 'begeleider-choose' | 'register-begeleider' | 'begeleider-verify'
   | 'begeleider-login' | 'begeleider-forgot-pin' | 'begeleider-reset-pin'
 
@@ -129,9 +129,15 @@ export default function LandingPage() {
       })
       const data = await res.json()
       if (!res.ok) return setError(data.error)
-      setPendingSession({ ...data, isSingle: true, begeleiderName: 'Ruard Stolper' })
-      setPin(''); setNewPin(''); setConfirmPin('')
-      setMode('set-pin')
+      const pending = { ...data, isSingle: true, begeleiderName: 'Ruard Stolper' }
+      setPendingSession(pending)
+      if (data.emailSent) {
+        setResetToken('')
+        setMode('verify-email')
+      } else {
+        setPin(''); setNewPin(''); setConfirmPin('')
+        setMode('set-pin')
+      }
     } catch { setError('Er ging iets mis. Probeer het opnieuw.') }
     finally { setLoading(false) }
   }
@@ -152,11 +158,37 @@ export default function LandingPage() {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ coupleCode: data.coupleCode, begeleiderName: bg }),
       })
-      setPendingSession({ ...data, isSingle: false, begeleiderName: bg })
-      setPin(''); setNewPin(''); setConfirmPin('')
-      setMode('set-pin')
+      const pending = { ...data, isSingle: false, begeleiderName: bg }
+      setPendingSession(pending)
+      if (data.emailSent) {
+        setResetToken('')
+        setMode('verify-email')
+      } else {
+        setPin(''); setNewPin(''); setConfirmPin('')
+        setMode('set-pin')
+      }
     } catch { setError('Er ging iets mis. Probeer het opnieuw.') }
     finally { setLoading(false) }
+  }
+
+  // ── VERIFY EMAIL (after create/solo with email) ───────────────────────
+  async function handleVerifyEmail(skip = false) {
+    if (!pendingSession) return
+    if (!skip) {
+      if (!resetToken.trim() || resetToken.length < 6) return setError('Voer de 6-cijferige code in')
+      setLoading(true); setError('')
+      try {
+        const res = await fetch('/api/auth/verify-email', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ coupleCode: pendingSession.coupleCode, token: resetToken.trim() }),
+        })
+        const data = await res.json()
+        if (!res.ok) { setError(data.error); return }
+      } catch { setError('Er ging iets mis.'); return }
+      finally { setLoading(false) }
+    }
+    setResetToken(''); setNewPin(''); setConfirmPin('')
+    setMode('set-pin')
   }
 
   // ── JOIN ──────────────────────────────────────────────────────────────
@@ -403,9 +435,76 @@ export default function LandingPage() {
               <p className="font-semibold text-stone-600 text-sm">Ben je begeleider?</p>
               <p className="text-stone-400 text-xs mt-0.5">Registreer of log in als begeleider.</p>
             </button>
-            <button onClick={() => { setGuestMode(); router.push('/home') }}
+            <button onClick={() => { setMode('recover'); setError('') }}
               className="w-full text-center text-xs text-stone-400 py-2 hover:text-stone-600 transition-colors">
+              Koppelcode of PIN vergeten?
+            </button>
+            <button onClick={() => { setGuestMode(); router.push('/home') }}
+              className="w-full text-center text-xs text-stone-400 py-1 hover:text-stone-600 transition-colors">
               Bekijk de cursus zonder account →
+            </button>
+          </div>
+        )}
+
+        {/* ── RECOVER ── */}
+        {mode === 'recover' && (
+          <div className="space-y-3">
+            <button onClick={() => { setMode('choose'); setError('') }} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
+            <div className="bg-stone-100 rounded-2xl p-4 mb-1">
+              <p className="text-sm font-semibold text-stone-700 mb-1">Wat wil je herstellen?</p>
+              <p className="text-xs text-stone-500 leading-relaxed">Kies hieronder wat je kwijt bent. We sturen een herstelcode naar het e-mailadres dat bij je account is opgeslagen.</p>
+            </div>
+            <button onClick={() => { setMode('forgot-code'); setEmail(''); setError('') }}
+              className="w-full text-left bg-white border border-stone-200 rounded-2xl p-5 active:scale-95 transition-transform">
+              <p className="font-bold text-stone-900 text-base">Koppelcode vergeten</p>
+              <p className="text-stone-500 text-sm mt-1 leading-snug">We sturen je koppelcode naar je e-mailadres.</p>
+            </button>
+            <button onClick={() => { setMode('forgot-pin'); setCode(''); setName(''); setError('') }}
+              className="w-full text-left bg-white border border-stone-200 rounded-2xl p-5 active:scale-95 transition-transform">
+              <p className="font-bold text-stone-900 text-base">PIN vergeten</p>
+              <p className="text-stone-500 text-sm mt-1 leading-snug">Stel een nieuwe PIN in via je koppelcode en e-mail.</p>
+            </button>
+          </div>
+        )}
+
+        {/* ── VERIFY EMAIL ── */}
+        {mode === 'verify-email' && pendingSession && (
+          <div className="space-y-4">
+            <div className="text-center pt-2">
+              <p className="text-2xl mb-2">📬</p>
+              <p className="font-bold text-stone-900">Bevestig je e-mailadres</p>
+              <p className="text-sm text-stone-500 mt-1 leading-relaxed">
+                We hebben een 6-cijferige code gestuurd naar <strong>{email}</strong>. Voer hem hieronder in.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl border-2 border-stone-900 overflow-hidden">
+              <div className="bg-stone-900 px-4 py-3">
+                <p className="text-white font-bold text-sm">Jouw koppelcode — sla op!</p>
+              </div>
+              <div className="px-4 py-3 flex items-center justify-between gap-3">
+                <p className="font-mono text-2xl font-bold tracking-widest text-stone-900">{pendingSession.coupleCode}</p>
+                <button onClick={copyCode}
+                  className={`text-xs px-3 py-1.5 rounded-xl font-semibold transition-colors ${copied ? 'bg-green-100 text-green-700' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>
+                  {copied ? '✓ Gekopieerd' : 'Kopieer'}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Code uit e-mail</label>
+              <input type="text" inputMode="numeric" maxLength={6} value={resetToken}
+                onChange={e => setResetToken(e.target.value.replace(/\D/g, ''))}
+                placeholder="123456" className={`${inputCls} tracking-widest text-center`} autoFocus />
+            </div>
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <button onClick={() => handleVerifyEmail(false)} disabled={loading || resetToken.length < 6}
+              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50 active:scale-95 transition-transform">
+              {loading ? 'Bezig...' : 'Bevestigen →'}
+            </button>
+            <button onClick={() => handleVerifyEmail(true)}
+              className="w-full text-center text-xs text-stone-400 py-1">
+              Overslaan (e-mail later bevestigen)
             </button>
           </div>
         )}
@@ -564,7 +663,7 @@ export default function LandingPage() {
         {/* ── FORGOT CODE ── */}
         {mode === 'forgot-code' && (
           <div className="space-y-4">
-            <button onClick={() => { setMode('join'); setError('') }} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
+            <button onClick={() => { setMode('recover'); setError('') }} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
             <div>
               <p className="font-bold text-stone-900 mb-1">Koppelcode vergeten?</p>
               <p className="text-sm text-stone-500 mb-4 leading-relaxed">Voer het e-mailadres in dat bij het aanmaken is opgegeven. Dan sturen we je de code toe.</p>
@@ -590,7 +689,7 @@ export default function LandingPage() {
             </p>
             <button onClick={() => { setMode('join'); setError(''); setEmail('') }}
               className="w-full py-4 bg-stone-900 text-white rounded-2xl font-semibold text-base">
-              Terug naar inloggen
+              Inloggen met koppelcode
             </button>
           </div>
         )}
@@ -598,7 +697,7 @@ export default function LandingPage() {
         {/* ── FORGOT PIN ── */}
         {mode === 'forgot-pin' && (
           <div className="space-y-4">
-            <button onClick={() => { setMode('join-pin'); setError('') }} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
+            <button onClick={() => { setMode('recover'); setError('') }} className="text-stone-400 text-sm flex items-center gap-1">← Terug</button>
             <div>
               <p className="font-bold text-stone-900 mb-1">PIN vergeten?</p>
               <p className="text-sm text-stone-500 mb-4 leading-relaxed">
