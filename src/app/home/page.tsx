@@ -42,7 +42,7 @@ export default function HomePage() {
   useEffect(() => {
     const s = getSession()
     if (!s) {
-      if (!isGuestMode()) { router.replace('/'); return }
+      if (!isGuestMode()) { router.replace('/?next=/home'); return }
       setIsGuest(true)
     } else {
       setSessionData(s)

@@ -39,7 +39,7 @@ export default function DeelPage() {
 
   useEffect(() => {
     const s = getSession()
-    if (!s && !isGuestMode()) { router.replace('/'); return }
+    if (!s && !isGuestMode()) { router.replace(`/?next=/deel/${deelId}`); return }
     if (s) {
       setSessionData(s)
       fetch(`/api/progress?memberId=${s.memberId}`)

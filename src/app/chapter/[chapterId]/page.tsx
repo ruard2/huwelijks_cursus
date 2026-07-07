@@ -65,7 +65,7 @@ export default function ChapterPage() {
   useEffect(() => {
     const s = getSession()
     if (!s) {
-      if (!isGuestMode()) { router.replace('/'); return }
+      if (!isGuestMode()) { router.replace(`/?next=/chapter/${chapterId}`); return }
       setIsGuest(true)
       const cd = getChapter(chapterId)
       if (cd) { setChapterData(cd); loadOverrides(chapterId) }

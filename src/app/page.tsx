@@ -79,9 +79,14 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [registeredEmail, setRegisteredEmail] = useState('')
+  const [nextUrl, setNextUrl] = useState('')
+  const [showSessionMsg, setShowSessionMsg] = useState(false)
 
   useEffect(() => {
-    if (getSession()) router.replace('/home')
+    if (getSession()) { router.replace('/home'); return }
+    const params = new URLSearchParams(window.location.search)
+    const next = params.get('next') ?? ''
+    if (next) { setNextUrl(next); setShowSessionMsg(true) }
   }, [router])
 
   function back() { setMode('choose'); setError('') }
@@ -108,7 +113,7 @@ export default function LandingPage() {
         begeleiderName: data.begeleiderName ?? 'Ruard Stolper',
         isBegeleider: false,
       })
-      router.push('/home')
+      router.push(nextUrl || '/home')
     } catch { setError('Er ging iets mis. Probeer het opnieuw.') }
     finally { setLoading(false) }
   }
@@ -182,7 +187,7 @@ export default function LandingPage() {
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
       setSession({ memberId: data.memberId, memberName: data.memberName, coupleId: data.coupleId, coupleCode: data.coupleCode, isSingle: false, isBegeleider: true })
-      router.push('/home')
+      router.push(nextUrl || '/home')
     } catch { setError('Er ging iets mis.') }
     finally { setLoading(false) }
   }
@@ -199,7 +204,7 @@ export default function LandingPage() {
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
       setSession({ memberId: data.memberId, memberName: data.memberName, coupleId: data.coupleId, coupleCode: data.coupleCode, isSingle: false, isBegeleider: true })
-      router.push('/home')
+      router.push(nextUrl || '/home')
     } catch { setError('Er ging iets mis.') }
     finally { setLoading(false) }
   }
@@ -233,7 +238,7 @@ export default function LandingPage() {
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
       setSession({ memberId: data.memberId, memberName: data.memberName, coupleId: data.coupleId, coupleCode: data.coupleCode, isSingle: false, isBegeleider: true })
-      router.push('/home')
+      router.push(nextUrl || '/home')
     } catch { setError('Er ging iets mis.') }
     finally { setLoading(false) }
   }
@@ -251,6 +256,12 @@ export default function LandingPage() {
         {/* ── CHOOSE ── */}
         {mode === 'choose' && (
           <div className="space-y-3">
+            {showSessionMsg && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 mb-1">
+                <p className="text-sm text-amber-800 font-medium">Log opnieuw in om verder te gaan</p>
+                <p className="text-xs text-amber-600 mt-0.5">Je sessie is verlopen of je gebruikt een nieuw apparaat.</p>
+              </div>
+            )}
             <button onClick={() => { setMode('login'); setCode(''); setName(''); setError('') }}
               className="w-full text-left bg-stone-900 text-white rounded-2xl p-5 active:scale-95 transition-transform">
               <p className="font-bold text-base">Inloggen</p>
