@@ -109,7 +109,7 @@ export default function TakeawaySummary() {
                       <div className="space-y-2">
                         {myA?.value && (
                           <div>
-                            <p className="text-[10px] font-semibold text-stone-400 mb-0.5">{myA.member.name.split(' ')[0]}</p>
+                            <p className="text-[10px] font-semibold text-stone-400 mb-0.5">{myA.member?.name?.split(' ')[0]}</p>
                             <p className="text-sm text-stone-800 leading-relaxed whitespace-pre-wrap">{myA.value}</p>
                           </div>
                         )}
@@ -149,8 +149,8 @@ export default function TakeawaySummary() {
                 return (
                   <div key={q.id} style={{ marginBottom: '0.75rem' }}>
                     <p style={{ fontSize: '0.75rem', color: '#78716c', fontStyle: 'italic', marginBottom: '0.25rem' }}>{q.text}</p>
-                    {myA?.value && <p style={{ fontSize: '0.875rem', marginBottom: '0.15rem' }}><strong>{myA.member.name.split(' ')[0]}:</strong> {myA.value}</p>}
-                    {partnerA?.value && <p style={{ fontSize: '0.875rem' }}><strong>{partnerA.member.name.split(' ')[0]}:</strong> {partnerA.value}</p>}
+                    {myA?.value && <p style={{ fontSize: '0.875rem', marginBottom: '0.15rem' }}><strong>{myA.member?.name?.split(' ')[0]}:</strong> {myA.value}</p>}
+                    {partnerA?.value && <p style={{ fontSize: '0.875rem' }}><strong>{partnerA.member?.name?.split(' ')[0]}:</strong> {partnerA.value}</p>}
                   </div>
                 )
               })}

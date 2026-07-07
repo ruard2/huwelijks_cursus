@@ -402,7 +402,7 @@ export default function ChapterPage() {
                     className="w-full px-4 py-2.5 border border-stone-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-300 min-h-[60px]" />
                   {partnerPart?.value && (sectionType === 'samen' || myPersonalDone) && (
                     <div className="mt-1 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
-                      <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerPart.memberName.split(' ')[0]}</p>
+                      <p className="text-xs font-semibold text-blue-600 mb-0.5">{partnerPart.memberName?.split(' ')[0]}</p>
                       <p className="text-sm text-stone-700 whitespace-pre-wrap">{partnerPart.value}</p>
                     </div>
                   )}
@@ -477,7 +477,7 @@ export default function ChapterPage() {
           const fuPartner = answers[fuKey]?.partner
           return fuPartner?.value && showPartner ? (
             <div className="mt-2 bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
-              <p className="text-[10px] font-semibold text-blue-600 mb-0.5">{fuPartner.memberName.split(' ')[0]} — {eq.followUp}</p>
+              <p className="text-[10px] font-semibold text-blue-600 mb-0.5">{fuPartner.memberName?.split(' ')[0]} — {eq.followUp}</p>
               <p className="text-sm text-stone-700 whitespace-pre-wrap">{fuPartner.value}</p>
             </div>
           ) : null
@@ -554,13 +554,13 @@ export default function ChapterPage() {
                   <p className="text-xs text-stone-500 mb-2 italic">{txt(`s:${sec.id}.q:${q.id}.text`, q.text)}</p>
                   {myA?.value && (
                     <div className="mb-1.5">
-                      <p className="text-[10px] font-semibold text-stone-400 mb-0.5">{myA.memberName.split(' ')[0]}</p>
+                      <p className="text-[10px] font-semibold text-stone-400 mb-0.5">{myA.memberName?.split(' ')[0]}</p>
                       <p className="text-sm text-stone-800 whitespace-pre-wrap leading-snug">{myA.value}</p>
                     </div>
                   )}
                   {partnerA?.value && (
                     <div>
-                      <p className="text-[10px] font-semibold text-stone-400 mb-0.5">{partnerA.memberName.split(' ')[0]}</p>
+                      <p className="text-[10px] font-semibold text-stone-400 mb-0.5">{partnerA.memberName?.split(' ')[0]}</p>
                       <p className="text-sm text-stone-800 whitespace-pre-wrap leading-snug">{partnerA.value}</p>
                     </div>
                   )}
