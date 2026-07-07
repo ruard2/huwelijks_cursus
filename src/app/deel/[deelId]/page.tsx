@@ -44,7 +44,7 @@ export default function DeelPage() {
       setSessionData(s)
       fetch(`/api/progress?memberId=${s.memberId}`)
         .then(r => r.json())
-        .then(data => setProgress(data.progress ?? []))
+        .then(data => setProgress((data.progress ?? []).map((p: ProgressEntry & { member?: { name: string } }) => ({ ...p, memberName: p.memberName ?? p.member?.name ?? '' }))))
     }
     fetch(`/api/content?prefix=deel:${deelId}:`)
       .then(r => r.json())

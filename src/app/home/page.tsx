@@ -121,7 +121,7 @@ export default function HomePage() {
     const res = await fetch(`/api/progress?memberId=${memberId}`)
     if (res.ok) {
       const data = await res.json()
-      setProgress(data.progress)
+      setProgress((data.progress ?? []).map((p: ProgressEntry & { member?: { name: string } }) => ({ ...p, memberName: p.memberName ?? p.member?.name ?? '' })))
     }
   }
 
