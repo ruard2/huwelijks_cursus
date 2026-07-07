@@ -152,12 +152,14 @@ export default function ChapterPage() {
     if (!res.ok) return
     const s = getSession()!
     const map: AnswerMap = {}
-    for (const a of (await res.json()).answers as AnswerRecord[]) {
-      if (!map[a.questionId]) map[a.questionId] = {}
-      let displayValue = a.value
-      if (a.isPrivate && a.value) displayValue = await decryptAnswer(a.value, s.coupleCode)
-      if (a.memberId === memberId) map[a.questionId].mine = { ...a, value: displayValue }
-      else map[a.questionId].partner = { ...a, value: displayValue }
+    const raw = (await res.json()).answers as (AnswerRecord & { member?: { name: string } })[]
+    for (const a of raw) {
+      const record: AnswerRecord = { ...a, memberName: a.memberName ?? a.member?.name ?? '' }
+      if (!map[record.questionId]) map[record.questionId] = {}
+      let displayValue = record.value
+      if (record.isPrivate && record.value) displayValue = await decryptAnswer(record.value, s.coupleCode)
+      if (record.memberId === memberId) map[record.questionId].mine = { ...record, value: displayValue }
+      else map[record.questionId].partner = { ...record, value: displayValue }
     }
     setAnswers(map)
   }
